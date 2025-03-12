@@ -7,7 +7,7 @@
  * @returns {Promise<Object>} - Response with file info
  */
 export const uploadFile = async (userId, file) => {
-    try {CHANGES
+    try {
       const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
       const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
       

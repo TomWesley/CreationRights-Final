@@ -41,6 +41,7 @@ const CreationCard = ({ creation }) => {
   const isYouTubeVideo = creation.source === 'YouTube';
   
   // Determine if this has metadata
+  // Determine if this has metadata
   const hasMetadata = creation.metadata && Object.keys(creation.metadata).length > 0;
   
   // Format metadata for display

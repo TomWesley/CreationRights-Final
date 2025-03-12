@@ -432,6 +432,14 @@ export const AppProvider = ({ children }) => {
   };
 
   const handleEdit = (creation) => {
+    // Make sure we have a creation with metadata
+    if (!creation.metadata) {
+      creation.metadata = {
+        category: mapTypeToMetadataCategory(creation.type),
+        creationRightsId: generateCreationRightsId()
+      };
+    }
+    
     setCurrentCreation(creation);
     setEditMode(true);
     setActiveView('editCreation');

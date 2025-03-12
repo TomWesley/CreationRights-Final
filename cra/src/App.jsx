@@ -15,6 +15,7 @@ import LoadingIndicator from './components/shared/LoadingIndicator';
 import YouTubeImport from './components/pages/YouTubeImport';
 import FileUploadPage from './components/pages/FileUploadPage';
 import MetadataCompletionPage from './components/pages/MetadataCompletionPage';
+import MetadataEditPage from './components/pages/MetadataEditPage';
 import './CreationRightsApp.css';
 
 const AppContent = () => {

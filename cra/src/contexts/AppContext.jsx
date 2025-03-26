@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { 
   saveUserData, 
@@ -129,11 +128,6 @@ export const AppProvider = ({ children }) => {
       if (userCreations && userCreations.length > 0) {
         console.log(`Loaded ${userCreations.length} creations for user ${userEmail}`);
         setCreations(userCreations);
-      } else {
-        // If no creations on server, save initial ones
-        // console.log(`No creations found, initializing for user ${userEmail}`);
-        // await saveCreations(userEmail, sampleCreations);
-        // setCreations(sampleCreations);
       }
     } catch (error) {
       console.error('Error loading user data from server:', error);
@@ -344,7 +338,10 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  const resetForm = () => {
+  const resetForm = (preserveMetadata = false) => {
+    // If we need to preserve metadata from the current creation
+    const currentMetadata = preserveMetadata ? currentCreation.metadata : null;
+    
     setCurrentCreation({
       id: '',
       title: '',
@@ -354,97 +351,150 @@ export const AppProvider = ({ children }) => {
       notes: '',
       folderId: currentFolder ? currentFolder.id : '',
       tags: [],
+      // Conditionally include the metadata
+      ...(preserveMetadata && { metadata: currentMetadata })
     });
     setEditMode(false);
   };
 
-  // In src/contexts/AppContext.jsx - Update the handleSubmit function
-
-// In src/contexts/AppContext.jsx
-// Update the handleSubmit function
-
-const handleSubmit = (e) => {
-  e.preventDefault();
-  setIsLoading(true);
-  
-  try {
-    if (!currentCreation.title || !currentCreation.type) {
-      alert('Title and type are required fields');
-      setIsLoading(false);
-      return;
-    }
+  // Unified handleSubmit function that handles metadata
+  const handleSubmit = (creation, metadata) => {
+    setIsLoading(true);
     
-    // Log current creation for debugging
-    console.log('Submitting creation with data:', JSON.stringify(currentCreation));
-    
-    let updatedCreations;
-    
-    if (editMode) {
-      // Update existing creation
-      updatedCreations = creations.map(creation => 
-        creation.id === currentCreation.id ? {
-          ...currentCreation,
-          // Ensure metadata is preserved
-          metadata: currentCreation.metadata || {},
-          // Remove the temporary _fileObject if it exists
-          _fileObject: undefined 
-        } : creation
-      );
-    } else {
-      // Add new creation with unique ID
-      const newCreation = {
-        ...currentCreation,
-        id: `c${Date.now()}`,
-        dateCreated: currentCreation.dateCreated || new Date().toISOString().split('T')[0],
-        folderId: currentCreation.folderId || (currentFolder ? currentFolder.id : ''),
-        // Ensure metadata is included
-        metadata: currentCreation.metadata || {},
-        // Add user identifier to the creation
-        createdBy: currentUser.email,
-        createdAt: new Date().toISOString()
-      };
-      
-      // If the creation has a file object, handle it
-      if (newCreation._fileObject) {
-        // In a full implementation, you would upload the file to a server here
-        // For now, we just create a persistent object URL and store file metadata
-        const persistentUrl = URL.createObjectURL(newCreation._fileObject);
+    try {
+      // Handle case where creation is event (from form submit)
+      if (creation && creation.preventDefault) {
+        creation.preventDefault();
         
-        // Update the creation with file information
-        newCreation.fileUrl = persistentUrl;
+        // Using currentCreation state with its existing metadata
+        if (!currentCreation.title || !currentCreation.type) {
+          alert('Title and type are required fields');
+          setIsLoading(false);
+          return;
+        }
         
-        // Remove the temporary file object
-        delete newCreation._fileObject;
+        let updatedCreations;
+        
+        if (editMode) {
+          // Update existing creation
+          updatedCreations = creations.map(c => 
+            c.id === currentCreation.id ? {
+              ...currentCreation,
+              // Ensure metadata is preserved
+              metadata: currentCreation.metadata || {},
+              // Remove the temporary _fileObject if it exists
+              _fileObject: undefined 
+            } : c
+          );
+        } else {
+          // Add new creation with unique ID
+          const newCreation = {
+            ...currentCreation,
+            id: `c${Date.now()}`,
+            dateCreated: currentCreation.dateCreated || new Date().toISOString().split('T')[0],
+            folderId: currentCreation.folderId || (currentFolder ? currentFolder.id : ''),
+            // IMPORTANT: Ensure metadata is explicitly preserved here
+            metadata: currentCreation.metadata || {},
+            // Add user identifier to the creation
+            createdBy: currentUser.email,
+            createdAt: new Date().toISOString()
+          };
+          
+          // If the creation has a file object, handle it
+          if (newCreation._fileObject) {
+            const persistentUrl = URL.createObjectURL(newCreation._fileObject);
+            newCreation.fileUrl = persistentUrl;
+            delete newCreation._fileObject;
+          }
+          
+          console.log('Adding new creation with metadata:', JSON.stringify(newCreation.metadata));
+          updatedCreations = [...creations, newCreation];
+        }
+        
+        // Update state
+        setCreations(updatedCreations);
+        
+        // Explicitly save to the server
+        if (currentUser && currentUser.email) {
+          saveCreations(currentUser.email, updatedCreations)
+            .then(() => {
+              console.log('Successfully saved creations to server');
+              resetForm();
+              setActiveView('myCreations');
+            })
+            .catch(err => {
+              console.error('Error saving creations:', err);
+              alert('Error saving to server. Please try again.');
+            });
+        } else {
+          resetForm();
+          setActiveView('myCreations');
+        }
+      } 
+      // Handle case where creation and metadata are passed explicitly
+      else {
+        // Ensure creation has all required fields
+        if (!creation || !creation.title || !creation.type) {
+          alert('Title and type are required fields');
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log('handleSubmit called with creation:', JSON.stringify(creation));
+        console.log('Metadata received:', JSON.stringify(metadata));
+        
+        // Create a new creation object with metadata
+        const creationWithMetadata = {
+          ...creation,
+          metadata: metadata || creation.metadata || {},
+          id: creation.id || `c${Date.now()}`,
+          dateCreated: creation.dateCreated || new Date().toISOString().split('T')[0],
+          folderId: creation.folderId || (currentFolder ? currentFolder.id : ''),
+          createdBy: currentUser.email,
+          createdAt: new Date().toISOString()
+        };
+        
+        console.log('Submitting creation with metadata:', JSON.stringify(creationWithMetadata));
+        
+        let updatedCreations;
+        
+        if (editMode) {
+          // Update existing creation
+          updatedCreations = creations.map(c => 
+            c.id === creationWithMetadata.id ? creationWithMetadata : c
+          );
+        } else {
+          // Add new creation
+          updatedCreations = [...creations, creationWithMetadata];
+        }
+        
+        // Update state
+        setCreations(updatedCreations);
+        
+        // Explicitly save to the server
+        if (currentUser && currentUser.email) {
+          saveCreations(currentUser.email, updatedCreations)
+            .then(() => {
+              console.log('Successfully saved creations with metadata');
+              resetForm();
+              setActiveView('myCreations');
+            })
+            .catch(err => {
+              console.error('Error saving creations:', err);
+              alert('Error saving your creation. Please try again.');
+            });
+        } else {
+          resetForm();
+          setActiveView('myCreations');
+        }
       }
-      
-      console.log('Adding new creation with metadata:', JSON.stringify(newCreation.metadata));
-      
-      updatedCreations = [...creations, newCreation];
+    } catch (error) {
+      console.error('Error saving creation:', error);
+      alert('Error saving your creation. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Update state
-    setCreations(updatedCreations);
-    
-    // Log for debugging
-    console.log(`Saving ${updatedCreations.length} creations for user ${currentUser.email}`);
-    
-    // Explicitly save to the server
-    if (currentUser && currentUser.email) {
-      saveCreations(currentUser.email, updatedCreations).catch(err => {
-        console.error('Error saving creations:', err);
-      });
-    }
-    
-    // Reset form and navigate
-    resetForm();
-    setActiveView('myCreations');
-  } catch (error) {
-    console.error('Error saving creation:', error);
-    alert('Error saving your creation. Please try again.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   const handleEdit = (creation) => {
     // Make sure we have a creation with metadata
@@ -662,7 +712,7 @@ const handleSubmit = (e) => {
       handleTagInput,
       removeTag,
       resetForm,
-      handleSubmit,
+      handleSubmit,  // The unified submit function
       handleEdit,
       handleDelete,
       handleUpdateCreation,

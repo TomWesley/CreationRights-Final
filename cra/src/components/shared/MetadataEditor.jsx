@@ -9,12 +9,12 @@ import { Input } from '../ui/input';
 import { generateMetadataFormSchema } from '../../services/metadataExtraction';
 import { useAppContext } from '../../contexts/AppContext';
 
-const MetadataEditor = ({ creation, onSave, onCancel }) => {
+const MetadataEditor = ({ creation, onCancel }) => {
   const [formFields, setFormFields] = useState([]);
   const [formValues, setFormValues] = useState({});
   const [selectedFolder, setSelectedFolder] = useState(creation.folderId || '');
   const [missingRequiredFields, setMissingRequiredFields] = useState([]);
-  const { currentUser, folders, buildBreadcrumbs } = useAppContext();
+  const { currentUser, folders, buildBreadcrumbs, handleSubmit } = useAppContext();
 
   // Initialize form fields and values
   useEffect(() => {
@@ -53,7 +53,7 @@ const MetadataEditor = ({ creation, onSave, onCancel }) => {
   };
 
   // Validate form and submit
-  const handleSubmit = (e) => {
+  const handleSubmitForm = (e) => {
     e.preventDefault();
     
     // Check for all fields - making all metadata entries mandatory
@@ -66,11 +66,18 @@ const MetadataEditor = ({ creation, onSave, onCancel }) => {
       return;
     }
     
-    // Call onSave with the completed metadata and folder
-    onSave({
-      metadata: formValues,
-      folderId: selectedFolder
-    });
+    // Create an updated creation object with the new metadata and folder
+    const updatedCreation = {
+      ...creation,
+      folderId: selectedFolder,
+      // Important: We're maintaining any existing fields in the metadata
+      metadata: formValues
+    };
+    
+    // Call the unified handleSubmit function with the updated creation and its metadata
+    handleSubmit(updatedCreation, formValues);
+    
+    // This will automatically redirect to the creations list after saving
   };
 
   // Render form fields based on schema
@@ -129,7 +136,7 @@ const MetadataEditor = ({ creation, onSave, onCancel }) => {
           <CardTitle>Edit Metadata & Folder</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmitForm}>
             <div className="mb-6">
               <Label htmlFor="folder">Folder</Label>
               <select

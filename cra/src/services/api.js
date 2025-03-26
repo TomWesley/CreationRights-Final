@@ -67,15 +67,25 @@ export const saveUserData = async (email, userData) => {
 export const loadUserData = async (email) => {
   try {
     const sanitizedEmail = sanitizeEmail(email);
-    return await fetchAPI(`/users/${sanitizedEmail}`);
-  } catch (error) {
-    if (error.message.includes('404')) {
-      return null; // User data not found, return null
+    console.log(`Loading user data for ${sanitizedEmail}`);
+    
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const response = await fetch(`${API_URL}/users/${sanitizedEmail}`);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null; // User data not found
+      }
+      throw new Error(`Failed to load user data: ${response.status}`);
     }
+    
+    return await response.json();
+  } catch (error) {
     console.error('Error loading user data:', error);
     return null;
   }
 };
+
 
 // Folders operations
 export const saveFolders = async (email, folders) => {
@@ -98,14 +108,20 @@ export const loadFolders = async (email) => {
   try {
     const sanitizedEmail = sanitizeEmail(email);
     console.log(`Loading folders for ${sanitizedEmail}`);
-    const folders = await fetchAPI(`/users/${sanitizedEmail}/folders`);
-    return folders;
-  } catch (error) {
-    if (error.message.includes('404')) {
-      console.log(`No folders found for ${sanitizeEmail(email)}`);
-      return null;
+    
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const response = await fetch(`${API_URL}/users/${sanitizedEmail}/folders`);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null; // Folders not found
+      }
+      throw new Error(`Failed to load folders: ${response.status}`);
     }
     
+    const folders = await response.json();
+    return folders;
+  } catch (error) {
     console.error('Error loading folders:', error);
     return null;
   }
@@ -138,10 +154,12 @@ export const loadCreations = async (email) => {
     console.log(`Loading creations for ${sanitizedEmail}`);
     
     const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-    const url = `${API_URL}/users/${sanitizedEmail}/creations`;
+    const response = await fetch(`${API_URL}/users/${sanitizedEmail}/creations`);
     
-    const response = await fetch(url);
     if (!response.ok) {
+      if (response.status === 404) {
+        return []; // No creations found
+      }
       throw new Error(`Failed to load creations: ${response.status}`);
     }
     
@@ -150,8 +168,6 @@ export const loadCreations = async (email) => {
     
     // Process each creation to ensure URLs and metadata are correct
     return creations.map(creation => {
-      console.log(`Processing creation: ${creation.id}, type: ${creation.type}`);
-      
       // Ensure metadata exists
       if (!creation.metadata) {
         creation.metadata = {};
@@ -167,17 +183,11 @@ export const loadCreations = async (email) => {
         creation.fileUrl = creation.gcsUrl;
       }
       
-      // Log file URLs for debugging
-      console.log(`File URL: ${creation.fileUrl}, Thumbnail URL: ${creation.thumbnailUrl}`);
-      
       return creation;
     });
   } catch (error) {
     console.error('Error loading creations:', error);
-    if (error.message.includes('404')) {
-      return [];
-    }
-    throw error;
+    return [];
   }
 };
 
@@ -346,5 +356,99 @@ export const getUserProfilePhoto = async (email) => {
   } catch (error) {
     console.error('Error getting profile photo URL:', error);
     return null;
+  }
+};
+
+// Update the file upload function to work with the new folder structure
+export const uploadFile = async (userId, file, creationRightsId = null) => {
+  try {
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Include creationRightsId if provided
+    if (creationRightsId) {
+      formData.append('creationRightsId', creationRightsId);
+      console.log(`Including creationRightsId in upload: ${creationRightsId}`);
+    }
+    
+    // Send request
+    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    throw error;
+  }
+};
+
+// Add a function for thumbnail upload
+export const uploadThumbnail = async (userId, file, creationRightsId) => {
+  try {
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('creationRightsId', creationRightsId);
+    
+    // Send request
+    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/creation-thumbnail`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Thumbnail upload failed with status ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error uploading thumbnail:', error);
+    throw error;
+  }
+};
+
+// Update profile photo upload
+export const uploadProfilePhoto = async (userId, file) => {
+  try {
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Send request
+    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/profile-photo`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Profile photo upload failed with status ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    // Return the URL - prefer GCS URL if available
+    return result.file.gcsUrl || result.file.url;
+  } catch (error) {
+    console.error('Error uploading profile photo:', error);
+    throw error;
   }
 };

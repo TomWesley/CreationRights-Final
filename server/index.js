@@ -9,6 +9,7 @@ const dotenv = require('dotenv');
 const multer = require('multer');
 const fs = require('fs');
 
+
 // Load environment variables
 dotenv.config();
 
@@ -50,25 +51,8 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Configure multer for file uploads
-const multerStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Create user directory if it doesn't exist
-    const userId = req.params.userId;
-    const userDir = path.join(uploadsDir, userId);
-    
-    if (!fs.existsSync(userDir)) {
-      fs.mkdirSync(userDir, { recursive: true });
-    }
-    
-    cb(null, userDir);
-  },
-  filename: function (req, file, cb) {
-    // Create unique filename with original extension
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, uniqueSuffix + ext);
-  }
-});
+const multerStorage = multer.memoryStorage(); // Use memory storage instead of disk
+
 
 // File filter for allowed file types
 const fileFilter = (req, file, cb) => {
@@ -369,70 +353,67 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
     }
     
     const userId = req.params.userId;
-    const file = req.file;
+    const file = req.file; // This is now in memory, not on disk
     const contentType = file.mimetype;
     
     // Get creationRightsId from form data
     const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
     
-    console.log(`Processing upload for user ${userId}, file type: ${contentType}, creationRightsId: ${creationRightsId}`);
-    console.log('GCS bucket name:', BUCKET_NAME);
-    
     // Create file info object
     const fileInfo = {
       originalName: file.originalname,
-      filename: file.filename,
+      filename: file.originalname, // Use original name since we don't have a disk filename
       mimetype: contentType,
       size: file.size,
-      path: file.path,
       creationRightsId: creationRightsId
     };
     
     // Upload to Google Cloud Storage
     if (storage) {
       try {
-        // Create appropriate path in GCS using the new folder structure
-        const gcsFilePath = `users/${userId}/creations/assets/${creationRightsId}/${file.filename}`;
-        console.log(`Attempting to upload to path: ${gcsFilePath}`);
-        
+        const gcsFilePath = `users/${userId}/creations/assets/${creationRightsId}/${file.originalname}`;
         const bucket = storage.bucket(BUCKET_NAME);
+        const gcsFile = bucket.file(gcsFilePath);
         
-        // Upload the file to GCS
-        await bucket.upload(file.path, {
-          destination: gcsFilePath,
+        // Create a writable stream to GCS
+        const stream = gcsFile.createWriteStream({
           metadata: {
             contentType: contentType,
-            // Set cache control to prevent caching issues
             cacheControl: 'no-cache, max-age=0'
           },
-          // Make the file publicly accessible
           public: true
         });
         
-        // Get the public URL
-        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
-        console.log(`File uploaded successfully to GCS: ${publicUrl}`);
+        // Handle errors and completion
+        const streamPromise = new Promise((resolve, reject) => {
+          stream.on('error', (err) => {
+            reject(err);
+          });
+          
+          stream.on('finish', () => {
+            // Get the public URL
+            const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+            fileInfo.gcsUrl = publicUrl;
+            fileInfo.url = publicUrl;
+            resolve();
+          });
+        });
         
-        // Add URL to the response
-        fileInfo.gcsUrl = publicUrl;
-        fileInfo.url = publicUrl; // Use GCS URL as primary URL
+        // Write the buffer to the stream
+        stream.end(file.buffer);
         
-        // Clean up local file after successful upload
-        fs.unlinkSync(file.path);
-        console.log(`Local file deleted: ${file.path}`);
+        // Wait for the stream to finish
+        await streamPromise;
+        
+        console.log(`File uploaded successfully to GCS: ${fileInfo.gcsUrl}`);
       } catch (gcsError) {
         console.error('Error uploading to GCS:', gcsError);
-        console.error(gcsError.stack);
-        // Fall back to local file URL if GCS upload fails
-        const localUrl = `/uploads/${userId}/${file.filename}`;
-        fileInfo.url = localUrl;
-        console.log(`Falling back to local URL: ${localUrl}`);
+        // Handle error but no local file to fall back to
+        return res.status(500).json({ error: 'Failed to upload to cloud storage' });
       }
     } else {
-      // If no GCS, use local file path
-      const localUrl = `/uploads/${userId}/${file.filename}`;
-      fileInfo.url = localUrl;
-      console.log(`Using local file URL: ${localUrl}`);
+      // No GCS available
+      return res.status(500).json({ error: 'Cloud storage not available' });
     }
     
     res.status(200).json({

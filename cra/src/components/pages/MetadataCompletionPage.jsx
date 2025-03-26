@@ -1,5 +1,3 @@
-// src/components/pages/MetadataCompletionPage.jsx
-
 import React, { useState, useEffect } from 'react';
 import { Check, ArrowLeft, Upload, File, FileText, Image, Music, Video } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
@@ -12,7 +10,7 @@ const MetadataCompletionPage = () => {
     setActiveView, 
     currentCreation, 
     setCurrentCreation, 
-    handleSubmit,
+    handleSubmit, // Use the new function from context
     resetForm
   } = useAppContext();
   
@@ -53,27 +51,16 @@ const MetadataCompletionPage = () => {
   };
   
   // Handle save of completed metadata
-  // In src/components/pages/MetadataCompletionPage.jsx
-// Ensure the handleMetadataSave function preserves the metadata
-
-const handleMetadataSave = (metadata) => {
-  // Update current creation with metadata
-  const updatedCreation = {
-    ...currentCreation,
-    metadata: metadata
+  const handleMetadataSave = (metadata) => {
+    // Log metadata for debugging
+    console.log('Metadata from form:', JSON.stringify(metadata));
+    
+    // Use the new function that directly handles metadata
+    handleSubmit(currentCreation, metadata);
+    
+    // Show success state
+    setStep('success');
   };
-  
-  console.log('Saving creation with metadata:', JSON.stringify(metadata));
-  
-  setCurrentCreation(updatedCreation);
-  
-  // Submit the form
-  const mockEvent = { preventDefault: () => {} };
-  handleSubmit(mockEvent);
-  
-  // Show success state
-  setStep('success');
-};
   
   // Render file preview
   const renderFilePreview = () => {
@@ -222,3 +209,4 @@ const handleMetadataSave = (metadata) => {
 };
 
 export default MetadataCompletionPage;
+ 

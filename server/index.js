@@ -1,4 +1,4 @@
-// server/index.js
+// server/index.js - Updated with improved GCS folder structure
 
 const express = require('express');
 const cors = require('cors');
@@ -12,24 +12,21 @@ const fs = require('fs');
 // Load environment variables
 dotenv.config();
 
-
 const corsOptions = {
-  origin: '*', // In production, you might want to restrict this
+  origin: '*', // In production, you should restrict this
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   allowedHeaders: ['Content-Type', 'Authorization'],
   exposedHeaders: ['Content-Length', 'X-Content-Type-Options'],
   credentials: true,
   maxAge: 86400 // 1 day in seconds
 };
+
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Configure middleware
-// Apply CORS middleware with options
 app.use(cors(corsOptions));
-
-// Also add an OPTIONS handler for preflight requests
 app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
 
@@ -45,9 +42,6 @@ try {
 
 // Configuration
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'creation-rights-app';
-const USER_DATA_PREFIX = 'users/';
-const FOLDERS_PREFIX = 'folders/';
-const CREATIONS_PREFIX = 'creations/';
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -125,8 +119,25 @@ const handleStorageOperation = async (operation) => {
 };
 
 // Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+app.get('/api/health', (req, next) => {
+  // Set CORS headers
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  
+  // Continue to next middleware
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
+
+// Make sure the uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Using bucket name: ${BUCKET_NAME}`);
 });
 
 // User data endpoints
@@ -139,7 +150,7 @@ app.post('/api/users/:userId', async (req, res) => {
     
     await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`${USER_DATA_PREFIX}${userId}.json`);
+      const file = bucket.file(`users/${userId}/profile/info.json`);
       
       await file.save(JSON.stringify(userData), {
         contentType: 'application/json',
@@ -162,7 +173,7 @@ app.get('/api/users/:userId', async (req, res) => {
     
     const userData = await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`${USER_DATA_PREFIX}${userId}.json`);
+      const file = bucket.file(`users/${userId}/profile/info.json`);
       
       const [exists] = await file.exists();
       if (!exists) return null;
@@ -192,7 +203,7 @@ app.post('/api/users/:userId/folders', async (req, res) => {
     
     await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`${FOLDERS_PREFIX}${userId}.json`);
+      const file = bucket.file(`users/${userId}/profile/folders.json`);
       
       await file.save(JSON.stringify(folders), {
         contentType: 'application/json'
@@ -212,7 +223,7 @@ app.get('/api/users/:userId/folders', async (req, res) => {
     
     const folders = await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`${FOLDERS_PREFIX}${userId}.json`);
+      const file = bucket.file(`users/${userId}/profile/folders.json`);
       
       const [exists] = await file.exists();
       if (!exists) return null;
@@ -242,7 +253,7 @@ app.post('/api/users/:userId/creations', async (req, res) => {
     
     await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`${CREATIONS_PREFIX}${userId}.json`);
+      const file = bucket.file(`users/${userId}/creations/metadata/all.json`);
       
       await file.save(JSON.stringify(creations), {
         contentType: 'application/json'
@@ -262,7 +273,7 @@ app.get('/api/users/:userId/creations', async (req, res) => {
     
     const creations = await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`${CREATIONS_PREFIX}${userId}.json`);
+      const file = bucket.file(`users/${userId}/creations/metadata/all.json`);
       
       const [exists] = await file.exists();
       if (!exists) return null;
@@ -282,17 +293,75 @@ app.get('/api/users/:userId/creations', async (req, res) => {
   }
 });
 
-// Upload endpoint
-// Enhanced file handling based on content type
-// In server/index.js - Replace or update the file upload endpoint
-
-// In server/index.js - Update the file upload endpoint
-
-// Modify the upload endpoint in server/index.js
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running' });
+// For thumbnails and previews for video/audio content
+app.post('/api/users/:userId/creation-thumbnail', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const userId = req.params.userId;
+    const file = req.file;
+    const contentType = file.mimetype;
+    const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
+    
+    // Only allow image files for thumbnails
+    if (!file.mimetype.startsWith('image/')) {
+      fs.unlinkSync(file.path);
+      return res.status(400).json({ error: 'Only image files are allowed for thumbnails' });
+    }
+    
+    // Create file info object
+    const fileInfo = {
+      originalName: file.originalname,
+      filename: file.filename,
+      mimetype: contentType,
+      size: file.size,
+      path: file.path,
+      creationRightsId: creationRightsId
+    };
+    
+    // Upload to Google Cloud Storage
+    if (storage) {
+      try {
+        const bucket = storage.bucket(BUCKET_NAME);
+        const gcsFilePath = `users/${userId}/creations/assets/${creationRightsId}/thumbnail.${path.extname(file.filename).substring(1)}`;
+        
+        await bucket.upload(file.path, {
+          destination: gcsFilePath,
+          metadata: {
+            contentType: contentType,
+            cacheControl: 'no-cache, max-age=0'
+          },
+          public: true
+        });
+        
+        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        fileInfo.gcsUrl = publicUrl;
+        fileInfo.url = publicUrl;
+        
+        fs.unlinkSync(file.path);
+      } catch (error) {
+        console.error('Error uploading thumbnail to GCS:', error);
+        const localUrl = `/uploads/${userId}/thumbnails/${file.filename}`;
+        fileInfo.url = localUrl;
+      }
+    } else {
+      const localUrl = `/uploads/${userId}/thumbnails/${file.filename}`;
+      fileInfo.url = localUrl;
+    }
+    
+    res.status(200).json({
+      success: true,
+      file: fileInfo
+    });
+  } catch (error) {
+    console.error('Thumbnail upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
+// Upload endpoint for creation assets
 app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -322,8 +391,8 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
     // Upload to Google Cloud Storage
     if (storage) {
       try {
-        // Create appropriate path in GCS
-        const gcsFilePath = `creationcardassets/${creationRightsId}/${file.filename}`;
+        // Create appropriate path in GCS using the new folder structure
+        const gcsFilePath = `users/${userId}/creations/assets/${creationRightsId}/${file.filename}`;
         console.log(`Attempting to upload to path: ${gcsFilePath}`);
         
         const bucket = storage.bucket(BUCKET_NAME);
@@ -376,143 +445,7 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
   }
 });
 
-// Add endpoint to get all published creations for agency view
-app.get('/api/published-creations', async (req, res) => {
-  try {
-    const bucket = storage.bucket(BUCKET_NAME);
-    const [files] = await bucket.getFiles({ prefix: CREATIONS_PREFIX });
-    
-    const allCreations = [];
-    
-    // Process each file (each user's creations)
-    for (const file of files) {
-      try {
-        const [content] = await file.download();
-        const userCreations = JSON.parse(content.toString());
-        
-        // Filter for published creations only (assuming isPublished flag exists)
-        const publishedCreations = userCreations.filter(creation => creation.isPublished);
-        
-        if (publishedCreations.length > 0) {
-          allCreations.push(...publishedCreations);
-        }
-      } catch (err) {
-        console.error(`Error processing file ${file.name}:`, err);
-        // Continue with other files even if one fails
-      }
-    }
-    
-    res.status(200).json(allCreations);
-  } catch (error) {
-    console.error('Error loading published creations:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Debug endpoint to list all files in the bucket
-app.get('/api/debug/list-files', async (req, res) => {
-  try {
-    const bucket = storage.bucket(BUCKET_NAME);
-    const [files] = await bucket.getFiles();
-    
-    const fileList = files.map(file => ({
-      name: file.name,
-      size: file.metadata.size,
-      updated: file.metadata.updated,
-      timeCreated: file.metadata.timeCreated
-    }));
-    
-    res.status(200).json({
-      bucket: BUCKET_NAME,
-      totalFiles: fileList.length,
-      files: fileList
-    });
-  } catch (error) {
-    console.error('Error listing files:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Debug endpoint to view the contents of a specific file
-app.get('/api/debug/view-file', async (req, res) => {
-  try {
-    const { filename } = req.query;
-    
-    if (!filename) {
-      return res.status(400).json({ error: 'Filename is required' });
-    }
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    const file = bucket.file(filename);
-    
-    const [exists] = await file.exists();
-    if (!exists) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    
-    const [content] = await file.download();
-    const data = JSON.parse(content.toString());
-    
-    res.status(200).json({
-      filename,
-      data
-    });
-  } catch (error) {
-    console.error('Error viewing file:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Debug endpoint to clear a specific file
-app.get('/api/debug/clear-file', async (req, res) => {
-  try {
-    const { filename } = req.query;
-    
-    if (!filename) {
-      return res.status(400).json({ error: 'Filename is required' });
-    }
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    const file = bucket.file(filename);
-    
-    const [exists] = await file.exists();
-    if (!exists) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    
-    await file.delete();
-    
-    res.status(200).json({
-      message: `File ${filename} has been deleted`,
-      success: true
-    });
-  } catch (error) {
-    console.error('Error clearing file:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Test endpoint to verify GCS functionality
-app.get('/api/test-storage', async (req, res) => {
-  try {
-    const bucket = storage.bucket(BUCKET_NAME);
-    const file = bucket.file('test.json');
-    
-    console.log('Testing storage with test.json...');
-    
-    await file.save(JSON.stringify({ test: 'data', timestamp: new Date().toISOString() }), {
-      contentType: 'application/json'
-    });
-    
-    console.log('Test file saved successfully');
-    
-    res.status(200).json({ success: true, message: 'Test file created in bucket' });
-  } catch (error) {
-    console.error('Storage test error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
+// Profile photo upload endpoint
 app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -529,73 +462,69 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
       return res.status(400).json({ error: 'Only image files are allowed for profile photos' });
     }
     
-    // Create file URL
-    const fileUrl = `/uploads/${userId}/profile/${file.filename}`;
-    
-    // Ensure the profile directory exists
-    const profileDir = path.join(uploadsDir, userId, 'profile');
-    if (!fs.existsSync(profileDir)) {
-      fs.mkdirSync(profileDir, { recursive: true });
-    }
-    
-    // Move the file to the profile directory
-    const profilePath = path.join(profileDir, file.filename);
-    fs.renameSync(file.path, profilePath);
-    
-    // Get file metadata
+    // Create file info object
     const fileInfo = {
       originalName: file.originalname,
       filename: file.filename,
       mimetype: file.mimetype,
       size: file.size,
-      path: profilePath,
-      url: fileUrl
+      path: file.path
     };
     
-    // Store in GCS if available
+    // Upload to Google Cloud Storage
     if (storage) {
       try {
         const bucket = storage.bucket(BUCKET_NAME);
-        const gcsFilePath = `profiles/${userId}/${file.filename}`;
+        const gcsFilePath = `users/${userId}/profile/photo.${path.extname(file.filename).substring(1)}`;
         
         // Upload to GCS
-        await bucket.upload(profilePath, {
+        await bucket.upload(file.path, {
           destination: gcsFilePath,
           metadata: {
-            contentType: file.mimetype
-          }
+            contentType: file.mimetype,
+            cacheControl: 'no-cache, max-age=0'
+          },
+          public: true
         });
         
         // Generate public URL
-        fileInfo.gcsUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        fileInfo.gcsUrl = publicUrl;
+        fileInfo.url = publicUrl;
         
         // Clean up local file after successful upload
-        fs.unlinkSync(profilePath);
-      } catch (error) {
-        console.error('GCS upload error:', error);
-        // We'll still return success with the local file info
-      }
-    }
-    
-    // Update user data with the new profile photo URL
-    try {
-      const userDataFile = bucket.file(`${USER_DATA_PREFIX}${userId}.json`);
-      const [exists] = await userDataFile.exists();
-      
-      if (exists) {
-        const [content] = await userDataFile.download();
-        const userData = JSON.parse(content.toString());
+        fs.unlinkSync(file.path);
         
-        // Update the photo URL
-        userData.photoUrl = fileInfo.gcsUrl || fileInfo.url;
-        
-        // Save the updated user data
-        await userDataFile.save(JSON.stringify(userData), {
-          contentType: 'application/json'
-        });
+        // Update user data with the new profile photo URL
+        try {
+          const userInfoFile = bucket.file(`users/${userId}/profile/info.json`);
+          const [exists] = await userInfoFile.exists();
+          
+          if (exists) {
+            const [content] = await userInfoFile.download();
+            const userData = JSON.parse(content.toString());
+            
+            // Update the photo URL
+            userData.photoUrl = publicUrl;
+            
+            // Save the updated user data
+            await userInfoFile.save(JSON.stringify(userData), {
+              contentType: 'application/json'
+            });
+          }
+        } catch (error) {
+          console.error('Error updating user data with profile photo:', error);
+        }
+      } catch (gcsError) {
+        console.error('Error uploading profile photo to GCS:', gcsError);
+        // Fall back to local file URL if GCS upload fails
+        const localUrl = `/uploads/${userId}/profile/${file.filename}`;
+        fileInfo.url = localUrl;
       }
-    } catch (error) {
-      console.error('Error updating user data with profile photo:', error);
+    } else {
+      // If no GCS, use local file path
+      const localUrl = `/uploads/${userId}/profile/${file.filename}`;
+      fileInfo.url = localUrl;
     }
     
     res.status(200).json({
@@ -606,24 +535,4 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
     console.error('Profile photo upload error:', error);
     res.status(500).json({ error: error.message });
   }
-});
-// Serve uploaded files with proper CORS headers
-app.use('/uploads', (req, res, next) => {
-  // Set CORS headers
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  
-  // Continue to next middleware
-  next();
-}, express.static(path.join(__dirname, 'uploads')));
-
-// Make sure the uploads directory exists
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Using bucket name: ${BUCKET_NAME}`);
 });

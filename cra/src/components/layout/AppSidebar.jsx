@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, FileText, Users, Settings } from 'lucide-react';
+import { Home, FileText, Users, Settings, MessageSquare } from 'lucide-react';
 import FolderStructure from '../shared/FolderStructure';
 import { useAppContext } from '../../contexts/AppContext';
 
@@ -49,6 +49,32 @@ const AppSidebar = () => {
               <div className="folder-tree">
                 <FolderStructure />
               </div>
+            </div>
+            
+            <div>
+              <button
+                className={`nav-item ${activeView === 'team' ? 'nav-active' : ''}`}
+                onClick={() => {
+                  setActiveView('team');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <Users className="nav-icon" />
+                Team
+              </button>
+            </div>
+            
+            <div>
+              <button
+                className={`nav-item ${activeView === 'network' ? 'nav-active' : ''}`}
+                onClick={() => {
+                  setActiveView('network');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <MessageSquare className="nav-icon" />
+                Network
+              </button>
             </div>
             
             {userType === 'agency' && (

@@ -11,7 +11,8 @@ const AppHeader = () => {
     userType, 
     isMobileMenuOpen, 
     setIsMobileMenuOpen,
-    handleLogout 
+    handleLogout,
+    setActiveView
   } = useAppContext();
   
   // Format the email for display
@@ -44,15 +45,27 @@ const AppHeader = () => {
         </div>
         
         <div className="header-right">
-          <div className="user-info">
-            <span className="flex items-center">
-              <User className="h-4 w-4 mr-1 text-gray-400" />
-              <span className="user-name">{formatDisplayName(currentUser?.email)}</span>
-            </span>
-            <span className="user-email text-xs text-gray-400 ml-1">
-              {currentUser?.email}
-            </span>
-            <span className="user-type">
+          <div className="user-info flex items-center cursor-pointer" onClick={() => setActiveView('profile')}>
+            {currentUser?.photoUrl ? (
+              <img 
+                src={currentUser.photoUrl} 
+                alt={formatDisplayName(currentUser?.email)} 
+                className="w-8 h-8 rounded-full mr-2 object-cover border border-gray-200"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
+                <User className="h-4 w-4 text-gray-500" />
+              </div>
+            )}
+            <div>
+              <span className="flex items-center">
+                <span className="user-name">{currentUser?.name || formatDisplayName(currentUser?.email)}</span>
+              </span>
+              <span className="user-email text-xs text-gray-400 block">
+                {currentUser?.email}
+              </span>
+            </div>
+            <span className="user-type ml-2">
               {userType === 'creator' ? 'Creator' : 'Agency'}
             </span>
           </div>

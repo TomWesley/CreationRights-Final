@@ -1,4 +1,4 @@
-// src/components/shared/MetadataForm.jsx
+// src/components/shared/MetadataForm.jsx - Updated version
 
 import React, { useState, useEffect } from 'react';
 import { Save, ArrowLeft, AlertCircle } from 'lucide-react';
@@ -75,9 +75,9 @@ const MetadataForm = ({ contentType, initialMetadata, onSave, onCancel }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Check for required fields
+    // Check for all fields - making all metadata entries mandatory
     const missing = formFields
-      .filter(field => field.required && !formValues[field.key])
+      .filter(field => !formValues[field.key] && !field.auto)
       .map(field => field.key);
     
     if (missing.length > 0) {
@@ -97,7 +97,7 @@ const MetadataForm = ({ contentType, initialMetadata, onSave, onCancel }) => {
       <div key={field.key} className="mb-4">
         <Label 
           htmlFor={field.key} 
-          className={`${isMissing ? 'text-red-500' : ''} ${field.required ? 'after:content-["*"] after:ml-0.5 after:text-red-500' : ''}`}
+          className={`${isMissing ? 'text-red-500' : ''} after:content-["*"] after:ml-0.5 after:text-red-500`}
         >
           {field.label}
         </Label>
@@ -139,7 +139,7 @@ const MetadataForm = ({ contentType, initialMetadata, onSave, onCancel }) => {
       <div className="mb-4">
         <h2 className="text-lg font-semibold">{initialMetadata.category || contentType} Metadata</h2>
         <p className="text-sm text-gray-500">
-          Please complete the required information for this {initialMetadata.category || contentType.toLowerCase()}
+          All fields are required for complete documentation of your {initialMetadata.category || contentType.toLowerCase()}
         </p>
       </div>
       
@@ -148,7 +148,7 @@ const MetadataForm = ({ contentType, initialMetadata, onSave, onCancel }) => {
           <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-medium">Please fill out all required fields</p>
-            <p className="text-sm">Fields marked with an asterisk (*) are required</p>
+            <p className="text-sm">All fields are required for proper documentation</p>
           </div>
         </div>
       )}

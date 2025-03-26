@@ -24,8 +24,15 @@ const CreationsList = () => {
   } = useAppContext();
   
   const [showImportDropdown, setShowImportDropdown] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'draft', or 'published'
   
-  const filteredCreations = getFilteredCreations();
+  const filteredCreations = getFilteredCreations().filter(creation => {
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      return creation.status === statusFilter;
+    }
+    return true;
+  });
   
   return (
     <div className="creations-view">
@@ -94,16 +101,6 @@ const CreationsList = () => {
                   <button
                     className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
                     onClick={() => {
-                      setActiveView('newCreation');
-                      setShowImportDropdown(false);
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Manually
-                  </button>
-                  <button
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                    onClick={() => {
                       setActiveView('fileUpload');
                       setShowImportDropdown(false);
                     }}
@@ -134,15 +131,29 @@ const CreationsList = () => {
       
       <Card>
         <CardHeader className="tabs-header">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="image">Images</TabsTrigger>
-              <TabsTrigger value="text">Text</TabsTrigger>
-              <TabsTrigger value="music">Music</TabsTrigger>
-              <TabsTrigger value="video">Video</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList>
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="image">Images</TabsTrigger>
+                <TabsTrigger value="text">Text</TabsTrigger>
+                <TabsTrigger value="music">Music</TabsTrigger>
+                <TabsTrigger value="video">Video</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
+            <div className="flex items-center gap-2">
+              <select 
+                className="bg-gray-100 border border-gray-300 text-gray-700 text-sm rounded-md px-2 py-1"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {filteredCreations.length === 0 ? (
@@ -155,9 +166,6 @@ const CreationsList = () => {
                   : "Add your first creation or create a new folder"}
               </p>
               <div className="empty-actions">
-                <Button onClick={() => setActiveView('newCreation')}>
-                  <Plus className="button-icon" /> Add Creation
-                </Button>
                 <Button variant="outline" onClick={() => setActiveView('fileUpload')}>
                   <Upload className="button-icon" /> Upload File
                 </Button>

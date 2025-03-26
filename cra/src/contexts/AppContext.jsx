@@ -1,4 +1,3 @@
-// src/contexts/AppContext.jsx
 
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { 
@@ -9,6 +8,10 @@ import {
   saveCreations, 
   loadCreations 
 } from '../services/api';
+import {
+  mapTypeToMetadataCategory,
+  generateCreationRightsId
+} from '../services/metadataExtraction';
 
 // Sample data - used as fallback or initial data
 const initialFolders = [
@@ -20,49 +23,6 @@ const initialFolders = [
   { id: 'f6', name: 'Short Stories', parentId: 'f2' },
   { id: 'f7', name: 'Blog Posts', parentId: 'f2' },
 ];
-
-// const sampleCreations = [
-//   {
-//     id: 'c1',
-//     title: 'Mountain Landscape',
-//     type: 'Image',
-//     dateCreated: '2023-04-15',
-//     rights: 'All rights reserved, Copyright 2023',
-//     notes: 'Shot in Colorado during summer trip',
-//     folderId: 'f4',
-//     tags: ['nature', 'landscape']
-//   },
-//   {
-//     id: 'c2',
-//     title: 'Character Concept Art',
-//     type: 'Image',
-//     dateCreated: '2023-05-22',
-//     rights: 'Creative Commons Attribution',
-//     notes: 'Fantasy character design for personal project',
-//     folderId: 'f5',
-//     tags: ['fantasy', 'character']
-//   },
-//   {
-//     id: 'c3',
-//     title: 'The Lost Path',
-//     type: 'Text',
-//     dateCreated: '2023-03-10',
-//     rights: 'Copyright 2023, pending publication',
-//     notes: 'Short story for anthology submission',
-//     folderId: 'f6',
-//     tags: ['fiction', 'horror']
-//   },
-//   {
-//     id: 'c4',
-//     title: 'Summer Melody',
-//     type: 'Music',
-//     dateCreated: '2023-06-05',
-//     rights: 'All rights reserved, registered with ASCAP',
-//     notes: 'Acoustic guitar composition',
-//     folderId: 'f3',
-//     tags: ['acoustic', 'instrumental']
-//   }
-// ];
 
 // Create context
 export const AppContext = createContext();
@@ -282,6 +242,40 @@ export const AppProvider = ({ children }) => {
     // Clear auth state from localStorage
     localStorage.removeItem('authState');
   };
+  
+  const updateUserProfile = async (updatedUserData) => {
+    setIsLoading(true);
+    
+    try {
+      // Make sure we're using persistent URLs for photos, not object URLs
+      // Replace temporary object URLs with persistent ones from Cloud Storage
+      if (updatedUserData.photoUrl && updatedUserData.photoUrl.startsWith('blob:')) {
+        console.warn('Replacing temporary object URL with persisted URL - this should be handled in the component');
+      }
+      
+      // Update the user data in state
+      setCurrentUser(updatedUserData);
+      
+      // Update auth state in localStorage
+      const authState = {
+        isAuthenticated: true,
+        userType: userType,
+        currentUser: updatedUserData,
+        timestamp: new Date().getTime()
+      };
+      localStorage.setItem('authState', JSON.stringify(authState));
+      
+      // Save to server (if using an API)
+      if (updatedUserData.email) {
+        await saveUserData(updatedUserData.email, updatedUserData);
+        console.log('Profile updated successfully on server');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter creations based on current folder and search
   const getFilteredCreations = () => {
@@ -364,72 +358,93 @@ export const AppProvider = ({ children }) => {
     setEditMode(false);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    
-    try {
-      if (!currentCreation.title || !currentCreation.type) {
-        alert('Title and type are required fields');
-        setIsLoading(false);
-        return;
-      }
-      
-      let updatedCreations;
-      
-      if (editMode) {
-        // Update existing creation
-        updatedCreations = creations.map(creation => 
-          creation.id === currentCreation.id ? {
-            ...currentCreation,
-            // Remove the temporary _fileObject if it exists
-            _fileObject: undefined 
-          } : creation
-        );
-      } else {
-        // Add new creation with unique ID
-        const newCreation = {
-          ...currentCreation,
-          id: `c${Date.now()}`,
-          dateCreated: currentCreation.dateCreated || new Date().toISOString().split('T')[0],
-          folderId: currentCreation.folderId || (currentFolder ? currentFolder.id : ''),
-          // Add user identifier to the creation
-          createdBy: currentUser.email,
-          createdAt: new Date().toISOString()
-        };
-        
-        // If the creation has a file object, handle it
-        if (newCreation._fileObject) {
-          // In a full implementation, you would upload the file to a server here
-          // For now, we just create a persistent object URL and store file metadata
-          const persistentUrl = URL.createObjectURL(newCreation._fileObject);
-          
-          // Update the creation with file information
-          newCreation.fileUrl = persistentUrl;
-          
-          // Remove the temporary file object
-          delete newCreation._fileObject;
-        }
-        
-        updatedCreations = [...creations, newCreation];
-      }
-      
-      // Update state
-      setCreations(updatedCreations);
-      
-      // Log for debugging
-      console.log(`Saving ${updatedCreations.length} creations for user ${currentUser.email}`);
-      
-      // Reset form and navigate
-      resetForm();
-      setActiveView('myCreations');
-    } catch (error) {
-      console.error('Error saving creation:', error);
-      alert('Error saving your creation. Please try again.');
-    } finally {
+  // In src/contexts/AppContext.jsx - Update the handleSubmit function
+
+// In src/contexts/AppContext.jsx
+// Update the handleSubmit function
+
+const handleSubmit = (e) => {
+  e.preventDefault();
+  setIsLoading(true);
+  
+  try {
+    if (!currentCreation.title || !currentCreation.type) {
+      alert('Title and type are required fields');
       setIsLoading(false);
+      return;
     }
-  };
+    
+    // Log current creation for debugging
+    console.log('Submitting creation with data:', JSON.stringify(currentCreation));
+    
+    let updatedCreations;
+    
+    if (editMode) {
+      // Update existing creation
+      updatedCreations = creations.map(creation => 
+        creation.id === currentCreation.id ? {
+          ...currentCreation,
+          // Ensure metadata is preserved
+          metadata: currentCreation.metadata || {},
+          // Remove the temporary _fileObject if it exists
+          _fileObject: undefined 
+        } : creation
+      );
+    } else {
+      // Add new creation with unique ID
+      const newCreation = {
+        ...currentCreation,
+        id: `c${Date.now()}`,
+        dateCreated: currentCreation.dateCreated || new Date().toISOString().split('T')[0],
+        folderId: currentCreation.folderId || (currentFolder ? currentFolder.id : ''),
+        // Ensure metadata is included
+        metadata: currentCreation.metadata || {},
+        // Add user identifier to the creation
+        createdBy: currentUser.email,
+        createdAt: new Date().toISOString()
+      };
+      
+      // If the creation has a file object, handle it
+      if (newCreation._fileObject) {
+        // In a full implementation, you would upload the file to a server here
+        // For now, we just create a persistent object URL and store file metadata
+        const persistentUrl = URL.createObjectURL(newCreation._fileObject);
+        
+        // Update the creation with file information
+        newCreation.fileUrl = persistentUrl;
+        
+        // Remove the temporary file object
+        delete newCreation._fileObject;
+      }
+      
+      console.log('Adding new creation with metadata:', JSON.stringify(newCreation.metadata));
+      
+      updatedCreations = [...creations, newCreation];
+    }
+    
+    // Update state
+    setCreations(updatedCreations);
+    
+    // Log for debugging
+    console.log(`Saving ${updatedCreations.length} creations for user ${currentUser.email}`);
+    
+    // Explicitly save to the server
+    if (currentUser && currentUser.email) {
+      saveCreations(currentUser.email, updatedCreations).catch(err => {
+        console.error('Error saving creations:', err);
+      });
+    }
+    
+    // Reset form and navigate
+    resetForm();
+    setActiveView('myCreations');
+  } catch (error) {
+    console.error('Error saving creation:', error);
+    alert('Error saving your creation. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleEdit = (creation) => {
     // Make sure we have a creation with metadata
@@ -458,6 +473,29 @@ export const AppProvider = ({ children }) => {
         alert('Error deleting creation. Please try again.');
         setIsLoading(false);
       }
+    }
+  };
+  
+  const handleUpdateCreation = (updatedCreation) => {
+    setIsLoading(true);
+    
+    try {
+      const updatedCreations = creations.map(creation => 
+        creation.id === updatedCreation.id ? updatedCreation : creation
+      );
+      
+      // Update state
+      setCreations(updatedCreations);
+      
+      // Log for debugging
+      console.log(`Updated creation ${updatedCreation.id} status to ${updatedCreation.status}`);
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating creation:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -627,12 +665,14 @@ export const AppProvider = ({ children }) => {
       handleSubmit,
       handleEdit,
       handleDelete,
+      handleUpdateCreation,
       createFolder,
       deleteFolder,
       toggleFolderExpanded,
       navigateToFolder,
       buildBreadcrumbs,
       getSubFolderIds,
+      updateUserProfile,
     }}>
       {children}
     </AppContext.Provider>

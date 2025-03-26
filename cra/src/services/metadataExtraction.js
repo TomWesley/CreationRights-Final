@@ -8,6 +8,9 @@
 import { v4 as uuidv4 } from 'uuid';
 
 // Define metadata requirements by creation type
+// Updates to src/services/metadataExtraction.js
+
+// Update metadataRequirements to better match our four categories
 export const metadataRequirements = {
   Literature: [
     { key: 'creationRightsId', label: 'CreationRights ID', required: true, auto: true },
@@ -17,6 +20,7 @@ export const metadataRequirements = {
     { key: 'publisher', label: 'Publisher', required: false, auto: false },
     { key: 'genre', label: 'Genre', required: false, auto: false },
     { key: 'pageCount', label: 'Page Count', required: false, auto: false },
+    { key: 'sourceUrl', label: 'Source URL', required: false, auto: false },
     { key: 'rightsHolders', label: 'Rights Holders', required: true, auto: false }
   ],
   Audio: [
@@ -29,6 +33,7 @@ export const metadataRequirements = {
     { key: 'genre', label: 'Genre', required: false, auto: false },
     { key: 'duration', label: 'Duration', required: false, auto: true },
     { key: 'producer', label: 'Producer', required: false, auto: false },
+    { key: 'sourceUrl', label: 'Source URL', required: false, auto: false },
     { key: 'rightsHolders', label: 'Rights Holders', required: true, auto: false }
   ],
   Photography: [
@@ -40,6 +45,7 @@ export const metadataRequirements = {
     { key: 'createdDate', label: 'Created Date', required: true, auto: false },
     { key: 'collection', label: 'Collection', required: false, auto: false },
     { key: 'dimensions', label: 'Dimensions', required: false, auto: true },
+    { key: 'sourceUrl', label: 'Source URL', required: false, auto: false },
     { key: 'rightsHolders', label: 'Rights Holders', required: true, auto: false }
   ],
   Video: [
@@ -51,6 +57,7 @@ export const metadataRequirements = {
     { key: 'studio', label: 'Studio', required: false, auto: false },
     { key: 'genre', label: 'Genre', required: false, auto: false },
     { key: 'duration', label: 'Duration', required: false, auto: true },
+    { key: 'sourceUrl', label: 'Source URL', required: false, auto: false },
     { key: 'rightsHolders', label: 'Rights Holders', required: true, auto: false }
   ],
   // Map general types to specific metadata categories
@@ -212,7 +219,6 @@ function getInputTypeForField(fieldKey) {
   
   return 'text';
 }
-
 /**
  * Extract EXIF data from image file (placeholder implementation)
  * In a production app, use a proper EXIF library

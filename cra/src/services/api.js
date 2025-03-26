@@ -128,20 +128,67 @@ export const saveCreations = async (email, creations) => {
   }
 };
 
+// Add this to your loadCreations function in src/services/api.js
+
+// In src/services/api.js - Update the loadCreations function
+
 export const loadCreations = async (email) => {
   try {
     const sanitizedEmail = sanitizeEmail(email);
     console.log(`Loading creations for ${sanitizedEmail}`);
-    const creations = await fetchAPI(`/users/${sanitizedEmail}/creations`);
-    return creations;
-  } catch (error) {
-    if (error.message.includes('404')) {
-      console.log(`No creations found for ${sanitizeEmail(email)}`);
-      return null;
+    
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const url = `${API_URL}/users/${sanitizedEmail}/creations`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to load creations: ${response.status}`);
     }
     
+    const creations = await response.json();
+    console.log(`Loaded ${creations.length} creations from server`);
+    
+    // Process each creation to ensure URLs and metadata are correct
+    return creations.map(creation => {
+      console.log(`Processing creation: ${creation.id}, type: ${creation.type}`);
+      
+      // Ensure metadata exists
+      if (!creation.metadata) {
+        creation.metadata = {};
+      }
+      
+      // Make sure we have the category set
+      if (!creation.metadata.category) {
+        creation.metadata.category = mapTypeToMetadataCategory(creation.type);
+      }
+      
+      // Prefer GCS URLs as they are more reliable
+      if (creation.gcsUrl) {
+        creation.fileUrl = creation.gcsUrl;
+      }
+      
+      // Log file URLs for debugging
+      console.log(`File URL: ${creation.fileUrl}, Thumbnail URL: ${creation.thumbnailUrl}`);
+      
+      return creation;
+    });
+  } catch (error) {
     console.error('Error loading creations:', error);
-    return null;
+    if (error.message.includes('404')) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+// Helper function to map types to metadata categories
+const mapTypeToMetadataCategory = (type) => {
+  switch (type) {
+    case 'Image': return 'Photography';
+    case 'Music': return 'Audio';
+    case 'Text': return 'Literature';
+    case 'Video': return 'Video';
+    default: return type;
   }
 };
 
@@ -156,7 +203,7 @@ export const fetchYouTubeVideos = async (channelUrl) => {
     }
 
     // YouTube API requires an API key, configured in environment variable
-    const apiKey = process.env.REACT_APP_YOUTUBE_API_KEY;
+    const apiKey = process.env.REACT_APP_YOUTUBE_API_KEY || 'YOUR_API_KEY_HERE';
     
     if (!apiKey) {
       throw new Error('YouTube API key not configured');
@@ -264,4 +311,40 @@ export const convertVideoToCreation = (video) => {
     sourceUrl: video.sourceUrl,
     source: 'YouTube'
   };
+};
+
+/**
+ * Update user profile data
+ * @param {string} email 
+ * @param {Object} userData 
+ * @returns {Promise<boolean>}
+ */
+export const updateUserProfile = async (email, userData) => {
+  try {
+    const sanitizedEmail = sanitizeEmail(email);
+    await fetchAPI(`/users/${sanitizedEmail}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData)
+    });
+    return true;
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    return false;
+  }
+};
+
+/**
+ * Get user profile photo URL
+ * @param {string} email 
+ * @returns {Promise<string|null>}
+ */
+export const getUserProfilePhoto = async (email) => {
+  try {
+    const sanitizedEmail = sanitizeEmail(email);
+    const userData = await loadUserData(email);
+    return userData?.photoUrl || null;
+  } catch (error) {
+    console.error('Error getting profile photo URL:', error);
+    return null;
+  }
 };

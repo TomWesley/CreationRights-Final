@@ -1,7 +1,7 @@
 // src/components/shared/CreationCard.jsx
 
-import React, { useState } from 'react';
-import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Info, ChevronDown, ChevronUp, Play, Pause } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
@@ -9,6 +9,38 @@ import { useAppContext } from '../../contexts/AppContext';
 const CreationCard = ({ creation }) => {
   const { handleEdit, handleDelete } = useAppContext();
   const [showMetadata, setShowMetadata] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audio, setAudio] = useState(null);
+
+  // Initialize audio player if it's an audio file
+  useEffect(() => {
+    if (creation.type === 'Music' || creation.type === 'Audio') {
+      if (creation.fileUrl || creation.sourceUrl) {
+        const audioElement = new Audio(creation.fileUrl || creation.sourceUrl);
+        audioElement.addEventListener('ended', () => setIsPlaying(false));
+        setAudio(audioElement);
+      }
+    }
+
+    return () => {
+      if (audio) {
+        audio.pause();
+        audio.src = '';
+      }
+    };
+  }, [creation]);
+
+  // Toggle audio playback
+  const toggleAudio = () => {
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
 
   // Get icon for creation type
   const getCreationTypeIcon = (type, source) => {
@@ -37,12 +69,72 @@ const CreationCard = ({ creation }) => {
     }
   };
   
-  // Determine if this is a YouTube video
-  const isYouTubeVideo = creation.source === 'YouTube';
-  
-  // Determine if this has metadata
   // Determine if this has metadata
   const hasMetadata = creation.metadata && Object.keys(creation.metadata).length > 0;
+  
+  // Generate preview based on content type
+  const renderContentPreview = () => {
+    // For images
+    if (creation.type === 'Image' || creation.type === 'Photography') {
+      if (creation.fileUrl || creation.thumbnailUrl) {
+        return (
+          <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
+            <img 
+              src={creation.fileUrl || creation.thumbnailUrl} 
+              alt={creation.title} 
+              className="w-full h-full object-cover"
+            />
+          </div>
+        );
+      }
+    }
+    
+    // For videos
+    else if (creation.type === 'Video') {
+      if (creation.thumbnailUrl) {
+        return (
+          <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden relative">
+            <img 
+              src={creation.thumbnailUrl} 
+              alt={creation.title} 
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20">
+              <Play className="w-8 h-8 text-white" />
+            </div>
+          </div>
+        );
+      }
+    }
+    
+    // For audio
+    else if (creation.type === 'Music' || creation.type === 'Audio') {
+      return (
+        <div className="creation-thumbnail w-40 h-28 bg-gradient-to-r from-purple-500 to-blue-500 flex items-center justify-center">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-full"
+            onClick={toggleAudio}
+          >
+            {isPlaying ? <Pause className="w-8 h-8" /> : <Play className="w-8 h-8" />}
+          </Button>
+        </div>
+      );
+    }
+    
+    // For literature
+    else if (creation.type === 'Text' || creation.type === 'Literature') {
+      return (
+        <div className="creation-thumbnail w-40 h-28 bg-gradient-to-r from-green-100 to-green-300 flex items-center justify-center p-3">
+          <FileText className="w-12 h-12 text-green-600" />
+        </div>
+      );
+    }
+    
+    // Default thumbnail if no specific preview
+    return null;
+  };
   
   // Format metadata for display
   const renderMetadataSection = () => {
@@ -135,17 +227,8 @@ const CreationCard = ({ creation }) => {
   return (
     <Card className="creation-card">
       <div className="creation-content">
-        {/* YouTube videos show the thumbnail */}
-        {isYouTubeVideo && creation.thumbnailUrl ? (
-          <div className="creation-thumbnail" style={{ width: '160px', minWidth: '160px' }}>
-            <img 
-              src={creation.thumbnailUrl} 
-              alt={creation.title} 
-              className="w-full h-full object-cover"
-              style={{ height: '90px' }}
-            />
-          </div>
-        ) : null}
+        {/* Content Preview */}
+        {renderContentPreview()}
         
         <div className="creation-info-sidebar">
           <div>
@@ -155,7 +238,7 @@ const CreationCard = ({ creation }) => {
             <p className="creation-title">{creation.title}</p>
             <p className="creation-date">{creation.dateCreated}</p>
             
-            {isYouTubeVideo && creation.sourceUrl && (
+            {creation.source === 'YouTube' && creation.sourceUrl && (
               <a 
                 href={creation.sourceUrl} 
                 target="_blank" 
@@ -163,6 +246,17 @@ const CreationCard = ({ creation }) => {
                 className="text-xs flex items-center text-blue-600 hover:underline mt-1"
               >
                 <ExternalLink className="w-3 h-3 mr-1" /> View on YouTube
+              </a>
+            )}
+            
+            {creation.type === 'Literature' && creation.sourceUrl && (
+              <a 
+                href={creation.sourceUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs flex items-center text-blue-600 hover:underline mt-1"
+              >
+                <ExternalLink className="w-3 h-3 mr-1" /> View Source
               </a>
             )}
             
@@ -198,7 +292,7 @@ const CreationCard = ({ creation }) => {
                 </span>
               ))}
               
-              {isYouTubeVideo && (
+              {creation.source === 'YouTube' && (
                 <span className="tag bg-red-100 text-red-700">
                   YouTube
                 </span>
@@ -234,7 +328,7 @@ const CreationCard = ({ creation }) => {
             <Trash2 className="button-icon-small" /> Delete
           </Button>
           
-          {isYouTubeVideo && creation.sourceUrl && (
+          {creation.sourceUrl && (
             <Button 
               variant="outline" 
               size="sm" 

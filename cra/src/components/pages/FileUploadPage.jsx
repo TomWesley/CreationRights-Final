@@ -23,6 +23,8 @@ const FileUploadPage = () => {
         ...creationData,
         // Add the initial metadata
         metadata,
+        // Add draft status
+        status: 'draft',
         // Add the file object to store temporarily
         // This would be removed before saving to database
         _fileObject: fileObject
@@ -43,6 +45,7 @@ const FileUploadPage = () => {
       // Continue with basic file info if metadata extraction fails
       setCurrentCreation({
         ...creationData,
+        status: 'draft',
         _fileObject: fileObject
       });
       
@@ -98,6 +101,7 @@ const FileUploadPage = () => {
                   <li>Files will be categorized based on their type</li>
                   <li>You'll be prompted to add metadata on the next screen</li>
                   <li>Supported file types include images, audio, video, and documents</li>
+                  <li>All uploads will be marked as drafts until you submit them for approval</li>
                 </ul>
               </div>
               

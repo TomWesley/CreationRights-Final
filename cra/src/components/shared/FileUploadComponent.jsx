@@ -4,7 +4,8 @@ import React, { useState, useRef } from 'react';
 import { Upload, File, X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
-import { uploadFile, getFilePreviewUrl } from '../../services/fileUpload';
+import { uploadFile, getFilePreviewUrl, extractUrlFromText, generateVideoThumbnail, getAudioMetadata } from '../../services/fileUpload';
+import { generateCreationRightsId } from '../../services/metadataExtraction';
 
 const FileUploadComponent = ({ onFileProcessed }) => {
   const [isDragging, setIsDragging] = useState(false);
@@ -92,6 +93,21 @@ const FileUploadComponent = ({ onFileProcessed }) => {
     }
   };
 
+  // Helper function to convert data URL to Blob
+  const dataURLToBlob = (dataURL) => {
+    const parts = dataURL.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    
+    return new Blob([uInt8Array], { type: contentType });
+  };
+
   // Process the file
   const handleFile = async (selectedFile) => {
     setFile(selectedFile);
@@ -103,18 +119,96 @@ const FileUploadComponent = ({ onFileProcessed }) => {
       // Determine file type
       const fileType = getFileType(selectedFile);
       
+      console.log(`Processing ${fileType} file: ${selectedFile.name}`);
+      
       // Create file preview URL for immediate display
       const previewUrl = getFilePreviewUrl(selectedFile);
       
-      // Extract metadata from file
-      const metadata = await extractMetadata(selectedFile, fileType);
+      // Generate a CreationRights ID early in the process
+      const creationRightsId = generateCreationRightsId();
+      console.log(`Generated CreationRights ID: ${creationRightsId}`);
+      
+      // Initialize metadata and capture file info
+      const metadata = {
+        category: mapTypeToMetadataCategory(fileType),
+        creationRightsId: creationRightsId
+      };
+      
+      console.log('Initial metadata:', metadata);
+      
+      // Process based on file type
+      if (fileType === 'Image' || fileType === 'Photography') {
+        // For images, extract dimensions
+        try {
+          const dimensions = await getImageDimensions(selectedFile);
+          metadata.dimensions = dimensions;
+        } catch (error) {
+          console.error('Error getting image dimensions:', error);
+        }
+      } 
+      else if (fileType === 'Video') {
+        // For videos, generate a thumbnail
+        try {
+          console.log('Generating video thumbnail...');
+          const thumbnailDataUrl = await generateVideoThumbnail(selectedFile);
+          
+          // Convert data URL to blob for upload
+          const thumbnailBlob = dataURLToBlob(thumbnailDataUrl);
+          const thumbnailFile = new File(
+            [thumbnailBlob], 
+            `thumb_${creationRightsId}.jpg`, 
+            { type: 'image/jpeg' }
+          );
+          
+          // Upload thumbnail with the same creationRightsId
+          if (currentUser && currentUser.email) {
+            const thumbnailResult = await uploadFile(currentUser.email, thumbnailFile, creationRightsId);
+            metadata.thumbnailUrl = thumbnailResult.file.gcsUrl || thumbnailResult.file.url;
+            console.log('Thumbnail uploaded:', metadata.thumbnailUrl);
+          } else {
+            // If not logged in, store the data URL temporarily
+            metadata.thumbnailUrl = thumbnailDataUrl;
+          }
+        } catch (error) {
+          console.error('Error generating video thumbnail:', error);
+        }
+      } 
+      else if (fileType === 'Music' || fileType === 'Audio') {
+        // For audio, get duration and other metadata
+        try {
+          console.log('Extracting audio metadata...');
+          const audioMetadata = await getAudioMetadata(selectedFile);
+          Object.assign(metadata, audioMetadata);
+        } catch (error) {
+          console.error('Error extracting audio metadata:', error);
+        }
+      }
+      else if (fileType === 'Text' || fileType === 'Literature') {
+        // For text files, extract preview and look for URLs
+        if (selectedFile.type === 'text/plain' || selectedFile.type === 'text/markdown') {
+          try {
+            const textPreview = await readTextFilePreview(selectedFile);
+            metadata.textPreview = textPreview;
+            
+            // Look for URLs in the text
+            const sourceUrl = extractUrlFromText(textPreview);
+            if (sourceUrl) {
+              metadata.sourceUrl = sourceUrl;
+            }
+          } catch (error) {
+            console.error('Error reading text file:', error);
+          }
+        }
+      }
       
       // Upload the file to the server if the user is authenticated
       let uploadedFileInfo = null;
       if (currentUser && currentUser.email) {
         try {
-          const uploadResult = await uploadFile(currentUser.email, selectedFile);
+          console.log('Uploading file to server with creationRightsId:', creationRightsId);
+          const uploadResult = await uploadFile(currentUser.email, selectedFile, creationRightsId);
           uploadedFileInfo = uploadResult.file;
+          console.log('Upload result:', uploadedFileInfo);
           setUploadProgress(100);
         } catch (uploadError) {
           console.error('Error uploading file:', uploadError);
@@ -135,15 +229,19 @@ const FileUploadComponent = ({ onFileProcessed }) => {
         fileType: selectedFile.type,
         fileName: selectedFile.name,
         filePreviewUrl: previewUrl,
-        ...metadata
+        metadata: metadata  // Include metadata object
       };
       
       // Add server file info if available
       if (uploadedFileInfo) {
-        creationData.fileUrl = uploadedFileInfo.url;
-        creationData.gcsUrl = uploadedFileInfo.gcsUrl;
+        creationData.fileUrl = uploadedFileInfo.gcsUrl || uploadedFileInfo.url;
+        if (uploadedFileInfo.gcsUrl) {
+          creationData.gcsUrl = uploadedFileInfo.gcsUrl;
+        }
         creationData.originalName = uploadedFileInfo.originalName;
       }
+      
+      console.log('Final creation data:', creationData);
       
       // Call callback with processed data
       onFileProcessed(creationData, selectedFile);
@@ -172,48 +270,6 @@ const FileUploadComponent = ({ onFileProcessed }) => {
     if (mimeType.startsWith('text/')) return 'Text';
     
     return 'Other';
-  };
-
-  // Extract metadata from file
-  const extractMetadata = async (file, fileType) => {
-    const metadata = {};
-    
-    switch (fileType) {
-      case 'Image':
-        // Extract image dimensions
-        try {
-          const dimensions = await getImageDimensions(file);
-          metadata.dimensions = dimensions;
-        } catch (error) {
-          console.error('Error getting image dimensions:', error);
-        }
-        break;
-        
-      case 'Music':
-      case 'Video':
-        // Duration could be extracted here with more advanced libraries
-        // For now, we'll just note the file type
-        metadata.format = file.type;
-        break;
-        
-      case 'Text':
-        // For text files, we could extract preview content
-        if (file.type === 'text/plain' || file.type === 'text/markdown') {
-          try {
-            const textPreview = await readTextFilePreview(file);
-            metadata.textPreview = textPreview;
-          } catch (error) {
-            console.error('Error reading text file:', error);
-          }
-        }
-        break;
-        
-      default:
-        // No specific metadata for other types
-        break;
-    }
-    
-    return metadata;
   };
 
   // Get image dimensions
@@ -250,6 +306,17 @@ const FileUploadComponent = ({ onFileProcessed }) => {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+  };
+
+  // Helper function to map file types to metadata categories
+  const mapTypeToMetadataCategory = (fileType) => {
+    switch (fileType.toLowerCase()) {
+      case 'image': return 'Photography';
+      case 'music': return 'Audio';
+      case 'text': return 'Literature';
+      case 'video': return 'Video';
+      default: return fileType;
+    }
   };
 
   // Clear selected file

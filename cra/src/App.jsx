@@ -16,6 +16,8 @@ import YouTubeImport from './components/pages/YouTubeImport';
 import FileUploadPage from './components/pages/FileUploadPage';
 import MetadataCompletionPage from './components/pages/MetadataCompletionPage';
 import MetadataEditPage from './components/pages/MetadataEditPage';
+import TeamPage from './components/pages/TeamPage';
+import NetworkPage from './components/pages/NetworkPage';
 import './CreationRightsApp.css';
 
 const AppContent = () => {
@@ -45,14 +47,19 @@ const AppContent = () => {
       case 'myCreations':
         return <CreationsList />;
       case 'newCreation':
-      case 'editCreation':
         return <CreationForm />;
+      case 'editCreation':
+        return <MetadataEditPage />;
       case 'youtubeImport':
         return <YouTubeImport />;
       case 'fileUpload':
         return <FileUploadPage />;
       case 'metadataCompletion':
         return <MetadataCompletionPage />;
+      case 'team':
+        return <TeamPage />;
+      case 'network':
+        return <NetworkPage />;
       case 'creators':
         return userType === 'agency' ? <CreatorManagement /> : <CreatorDashboard />;
       case 'settings':

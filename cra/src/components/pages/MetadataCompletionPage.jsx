@@ -53,22 +53,27 @@ const MetadataCompletionPage = () => {
   };
   
   // Handle save of completed metadata
-  const handleMetadataSave = (metadata) => {
-    // Update current creation with metadata
-    const updatedCreation = {
-      ...currentCreation,
-      metadata: metadata
-    };
-    
-    setCurrentCreation(updatedCreation);
-    
-    // Submit the form
-    const mockEvent = { preventDefault: () => {} };
-    handleSubmit(mockEvent);
-    
-    // Show success state
-    setStep('success');
+  // In src/components/pages/MetadataCompletionPage.jsx
+// Ensure the handleMetadataSave function preserves the metadata
+
+const handleMetadataSave = (metadata) => {
+  // Update current creation with metadata
+  const updatedCreation = {
+    ...currentCreation,
+    metadata: metadata
   };
+  
+  console.log('Saving creation with metadata:', JSON.stringify(metadata));
+  
+  setCurrentCreation(updatedCreation);
+  
+  // Submit the form
+  const mockEvent = { preventDefault: () => {} };
+  handleSubmit(mockEvent);
+  
+  // Show success state
+  setStep('success');
+};
   
   // Render file preview
   const renderFilePreview = () => {

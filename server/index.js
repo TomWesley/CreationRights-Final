@@ -12,12 +12,25 @@ const fs = require('fs');
 // Load environment variables
 dotenv.config();
 
+
+const corsOptions = {
+  origin: '*', // In production, you might want to restrict this
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'X-Content-Type-Options'],
+  credentials: true,
+  maxAge: 86400 // 1 day in seconds
+};
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Configure middleware
-app.use(cors());
+// Apply CORS middleware with options
+app.use(cors(corsOptions));
+
+// Also add an OPTIONS handler for preflight requests
+app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
 
 // Initialize Google Cloud Storage
@@ -270,48 +283,84 @@ app.get('/api/users/:userId/creations', async (req, res) => {
 });
 
 // Upload endpoint
+// Enhanced file handling based on content type
+// In server/index.js - Replace or update the file upload endpoint
+
+// In server/index.js - Update the file upload endpoint
+
+// Modify the upload endpoint in server/index.js
+
 app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
-    // Create file URL
-    const fileUrl = `/uploads/${req.params.userId}/${req.file.filename}`;
+    const userId = req.params.userId;
+    const file = req.file;
+    const contentType = file.mimetype;
     
-    // Get file metadata
+    // Get creationRightsId from form data
+    const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
+    
+    console.log(`Processing upload for user ${userId}, file type: ${contentType}, creationRightsId: ${creationRightsId}`);
+    console.log('GCS bucket name:', BUCKET_NAME);
+    
+    // Create file info object
     const fileInfo = {
-      originalName: req.file.originalname,
-      filename: req.file.filename,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      path: req.file.path,
-      url: fileUrl
+      originalName: file.originalname,
+      filename: file.filename,
+      mimetype: contentType,
+      size: file.size,
+      path: file.path,
+      creationRightsId: creationRightsId
     };
     
-    // For Google Cloud Storage, we could upload the file here
+    // Upload to Google Cloud Storage
     if (storage) {
       try {
-        const bucket = storage.bucket(BUCKET_NAME);
-        const gcsFilePath = `files/${req.params.userId}/${req.file.filename}`;
+        // Create appropriate path in GCS
+        const gcsFilePath = `creationcardassets/${creationRightsId}/${file.filename}`;
+        console.log(`Attempting to upload to path: ${gcsFilePath}`);
         
-        // Upload to GCS
-        await bucket.upload(req.file.path, {
+        const bucket = storage.bucket(BUCKET_NAME);
+        
+        // Upload the file to GCS
+        await bucket.upload(file.path, {
           destination: gcsFilePath,
           metadata: {
-            contentType: req.file.mimetype
-          }
+            contentType: contentType,
+            // Set cache control to prevent caching issues
+            cacheControl: 'no-cache, max-age=0'
+          },
+          // Make the file publicly accessible
+          public: true
         });
         
-        // Generate public URL
-        fileInfo.gcsUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        // Get the public URL
+        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        console.log(`File uploaded successfully to GCS: ${publicUrl}`);
+        
+        // Add URL to the response
+        fileInfo.gcsUrl = publicUrl;
+        fileInfo.url = publicUrl; // Use GCS URL as primary URL
         
         // Clean up local file after successful upload
-        fs.unlinkSync(req.file.path);
-      } catch (error) {
-        console.error('GCS upload error:', error);
-        // We'll still return success with the local file info
+        fs.unlinkSync(file.path);
+        console.log(`Local file deleted: ${file.path}`);
+      } catch (gcsError) {
+        console.error('Error uploading to GCS:', gcsError);
+        console.error(gcsError.stack);
+        // Fall back to local file URL if GCS upload fails
+        const localUrl = `/uploads/${userId}/${file.filename}`;
+        fileInfo.url = localUrl;
+        console.log(`Falling back to local URL: ${localUrl}`);
       }
+    } else {
+      // If no GCS, use local file path
+      const localUrl = `/uploads/${userId}/${file.filename}`;
+      fileInfo.url = localUrl;
+      console.log(`Using local file URL: ${localUrl}`);
     }
     
     res.status(200).json({
@@ -461,9 +510,115 @@ app.get('/api/test-storage', async (req, res) => {
   }
 });
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const userId = req.params.userId;
+    const file = req.file;
+    
+    // Only allow image files for profile photos
+    if (!file.mimetype.startsWith('image/')) {
+      // Clean up the uploaded file
+      fs.unlinkSync(file.path);
+      return res.status(400).json({ error: 'Only image files are allowed for profile photos' });
+    }
+    
+    // Create file URL
+    const fileUrl = `/uploads/${userId}/profile/${file.filename}`;
+    
+    // Ensure the profile directory exists
+    const profileDir = path.join(uploadsDir, userId, 'profile');
+    if (!fs.existsSync(profileDir)) {
+      fs.mkdirSync(profileDir, { recursive: true });
+    }
+    
+    // Move the file to the profile directory
+    const profilePath = path.join(profileDir, file.filename);
+    fs.renameSync(file.path, profilePath);
+    
+    // Get file metadata
+    const fileInfo = {
+      originalName: file.originalname,
+      filename: file.filename,
+      mimetype: file.mimetype,
+      size: file.size,
+      path: profilePath,
+      url: fileUrl
+    };
+    
+    // Store in GCS if available
+    if (storage) {
+      try {
+        const bucket = storage.bucket(BUCKET_NAME);
+        const gcsFilePath = `profiles/${userId}/${file.filename}`;
+        
+        // Upload to GCS
+        await bucket.upload(profilePath, {
+          destination: gcsFilePath,
+          metadata: {
+            contentType: file.mimetype
+          }
+        });
+        
+        // Generate public URL
+        fileInfo.gcsUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        
+        // Clean up local file after successful upload
+        fs.unlinkSync(profilePath);
+      } catch (error) {
+        console.error('GCS upload error:', error);
+        // We'll still return success with the local file info
+      }
+    }
+    
+    // Update user data with the new profile photo URL
+    try {
+      const userDataFile = bucket.file(`${USER_DATA_PREFIX}${userId}.json`);
+      const [exists] = await userDataFile.exists();
+      
+      if (exists) {
+        const [content] = await userDataFile.download();
+        const userData = JSON.parse(content.toString());
+        
+        // Update the photo URL
+        userData.photoUrl = fileInfo.gcsUrl || fileInfo.url;
+        
+        // Save the updated user data
+        await userDataFile.save(JSON.stringify(userData), {
+          contentType: 'application/json'
+        });
+      }
+    } catch (error) {
+      console.error('Error updating user data with profile photo:', error);
+    }
+    
+    res.status(200).json({
+      success: true,
+      file: fileInfo
+    });
+  } catch (error) {
+    console.error('Profile photo upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+// Serve uploaded files with proper CORS headers
+app.use('/uploads', (req, res, next) => {
+  // Set CORS headers
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  
+  // Continue to next middleware
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
+// Make sure the uploads directory exists
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

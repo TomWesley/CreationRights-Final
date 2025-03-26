@@ -289,6 +289,9 @@ app.get('/api/users/:userId/creations', async (req, res) => {
 // In server/index.js - Update the file upload endpoint
 
 // Modify the upload endpoint in server/index.js
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Server is running' });
+});
 
 app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) => {
   try {

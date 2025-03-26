@@ -1,5 +1,4 @@
 // src/services/fileUpload.js
-
 /**
  * Uploads a file to the server
  * @param {string} userId - User ID (email)
@@ -9,8 +8,11 @@
  */
 export const uploadFile = async (userId, file, creationRightsId = null) => {
   try {
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    // Fix API URL format - make sure it doesn't have trailing slashes
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
     const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    console.log(`Uploading file to ${API_URL}/api/users/${sanitizedUserId}/upload`);
     
     // Create form data
     const formData = new FormData();
@@ -19,11 +21,10 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
     // Include creationRightsId if provided
     if (creationRightsId) {
       formData.append('creationRightsId', creationRightsId);
-      console.log(`Including creationRightsId in upload: ${creationRightsId}`);
     }
     
-    // Send request
-    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/upload`, {
+    // Send request - notice the path is now /api/users/...
+    const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -54,7 +55,32 @@ export const getFilePreviewUrl = (file) => {
  * @param {File} videoFile - Video file
  * @returns {Promise<string>} - Thumbnail data URL
  */
-export const generateVideoThumbnail = (videoFile) => {
+// Replace the generateVideoThumbnail function in fileUpload.js
+
+export const generateVideoThumbnail = async (videoFile, userId) => {
+  // First generate the thumbnail locally
+  const thumbnailDataUrl = await generateVideoThumbnailLocal(videoFile);
+  
+  // Convert data URL to Blob for upload
+  const thumbnailBlob = dataURLToBlob(thumbnailDataUrl);
+  const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
+  
+  // If we have a user ID, upload the thumbnail to the server
+  if (userId) {
+    try {
+      const result = await uploadFile(userId, thumbnailFile);
+      return result.file.gcsUrl || result.file.url;
+    } catch (error) {
+      console.error('Error uploading thumbnail:', error);
+      return thumbnailDataUrl; // Fallback to local thumbnail
+    }
+  }
+  
+  return thumbnailDataUrl;
+};
+
+// Generate thumbnail locally
+const generateVideoThumbnailLocal = (videoFile) => {
   return new Promise((resolve, reject) => {
     // Create video element to load the file
     const video = document.createElement('video');
@@ -99,6 +125,21 @@ export const generateVideoThumbnail = (videoFile) => {
     // Trigger loading of the video
     video.load();
   });
+};
+
+// Convert data URL to Blob for uploading
+const dataURLToBlob = (dataURL) => {
+  const parts = dataURL.split(';base64,');
+  const contentType = parts[0].split(':')[1];
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  const uInt8Array = new Uint8Array(rawLength);
+  
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  
+  return new Blob([uInt8Array], { type: contentType });
 };
 
 /**
@@ -164,4 +205,57 @@ export const extractUrlFromText = (text) => {
   }
   
   return null;
+};
+/**
+ * Maps general file types to specific metadata categories 
+ * @param {string} fileType - The general file type (Image, Music, Video, Text)
+ * @returns {string} - The corresponding metadata category
+ */
+const mapTypeToMetadataCategory = (fileType) => {
+  switch (fileType.toLowerCase()) {
+    case 'image':
+      return 'Photography';
+    case 'music':
+      return 'Audio';
+    case 'text':
+      return 'Literature';
+    case 'video':
+      return 'Video';
+    default:
+      return fileType;
+  }
+};
+
+/**
+ * Uploads a profile photo for a user
+ * @param {string} userId - User ID (email)
+ * @param {File} photoFile - Photo file to upload
+ * @returns {Promise<Object>} - Response with file info
+ */
+export const uploadProfilePhoto = async (userId, photoFile) => {
+  try {
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', photoFile);
+    formData.append('type', 'profile');  // Mark this as a profile photo
+    
+    // Send request
+    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/profile-photo`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error uploading profile photo:', error);
+    throw error;
+  }
 };

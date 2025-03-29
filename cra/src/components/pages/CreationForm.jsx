@@ -1,7 +1,7 @@
 // src/components/pages/CreationForm.jsx
 
 import React, { useState, useEffect } from 'react';
-import { X, FileText, ImageIcon, Music, Video, Code, File } from 'lucide-react';
+import { X, FileText, ImageIcon, Music, Video, Code, File, DollarSign, Info } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
@@ -26,6 +26,7 @@ const CreationForm = () => {
   } = useAppContext();
   
   const [filePreview, setFilePreview] = useState(null);
+  const [showLicensingInfo, setShowLicensingInfo] = useState(false);
   
   const creationTypes = ['Image', 'Text', 'Music', 'Video', 'Software', 'Other'];
   
@@ -41,6 +42,9 @@ const CreationForm = () => {
       setFilePreview(null);
     }
     
+    // Set licensing info visibility based on whether licensing cost exists
+    setShowLicensingInfo(!!currentCreation.licensingCost);
+    
     // Clean up function to revoke object URLs
     return () => {
       if (currentCreation.filePreviewUrl) {
@@ -48,6 +52,34 @@ const CreationForm = () => {
       }
     };
   }, [currentCreation]);
+  
+  // Handle licensing cost change
+  const handleLicensingCostChange = (e) => {
+    const value = e.target.value;
+    // Only allow numbers and a single decimal point
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      handleInputChange({
+        target: {
+          name: 'licensingCost',
+          value: value
+        }
+      });
+    }
+  };
+  
+  // Toggle licensing info visibility
+  const toggleLicensingInfo = () => {
+    setShowLicensingInfo(!showLicensingInfo);
+    if (!showLicensingInfo && !currentCreation.licensingCost) {
+      // Reset licensing cost when hiding the section
+      handleInputChange({
+        target: {
+          name: 'licensingCost',
+          value: ''
+        }
+      });
+    }
+  };
   
   // Render file preview based on type
   const renderFilePreview = () => {
@@ -278,6 +310,54 @@ const CreationForm = () => {
                 onKeyDown={handleTagInput}
                 className="tags-input"
               />
+            </div>
+            
+            {/* Licensing Cost Section */}
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <Label className="flex items-center">
+                  <span className="mr-1">Licensing Information</span>
+                  <button
+                    type="button"
+                    className="text-gray-500 hover:text-gray-700"
+                    onClick={() => window.alert("Set a standard licensing cost or leave empty to allow custom pricing via email contact.")}
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                </Label>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={toggleLicensingInfo}
+                  className="text-blue-600"
+                >
+                  {showLicensingInfo ? 'Remove Licensing Cost' : 'Add Licensing Cost'}
+                </Button>
+              </div>
+              
+              {showLicensingInfo && (
+                <div className="p-4 bg-blue-50 rounded-md border border-blue-100">
+                  <Label htmlFor="licensingCost" className="flex items-center text-blue-700 mb-2">
+                    <DollarSign className="h-4 w-4 mr-1" />
+                    Standard Licensing Cost
+                  </Label>
+                  <div className="flex items-center">
+                    <span className="text-lg font-medium mr-2">$</span>
+                    <Input 
+                      id="licensingCost"
+                      name="licensingCost"
+                      value={currentCreation.licensingCost || ''}
+                      onChange={handleLicensingCostChange}
+                      placeholder="0.00"
+                      className="w-40"
+                    />
+                  </div>
+                  <p className="text-xs text-blue-700 mt-2">
+                    Set a standard licensing cost or leave empty to allow custom pricing via email contact.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="form-actions">

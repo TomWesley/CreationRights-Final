@@ -1,16 +1,17 @@
 // src/components/shared/CreationCard.jsx
 
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Info, ChevronDown, ChevronUp, Play, Pause } from 'lucide-react';
+import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Info, ChevronDown, ChevronUp, Play, Pause, Globe, DollarSign, Mail } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
 
 const CreationCard = ({ creation }) => {
-  const { handleEdit, handleDelete } = useAppContext();
+  const { handleEdit, handleDelete, handleUpdateCreation, currentUser } = useAppContext();
   const [showMetadata, setShowMetadata] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audio, setAudio] = useState(null);
+  const [showContactInfo, setShowContactInfo] = useState(false);
 
   // Initialize audio player if it's an audio file
   useEffect(() => {
@@ -67,6 +68,20 @@ const CreationCard = ({ creation }) => {
       default:
         return <FileText className="creation-type-icon default-icon" />;
     }
+  };
+  
+  // Handler for making creation public
+  const handleMakePublic = () => {
+    const updatedCreation = {
+      ...creation,
+      status: 'published'
+    };
+    handleUpdateCreation(updatedCreation);
+  };
+
+  // Toggle contact info visibility
+  const toggleContactInfo = () => {
+    setShowContactInfo(!showContactInfo);
   };
   
   // Determine if this has metadata
@@ -223,6 +238,45 @@ const CreationCard = ({ creation }) => {
       </div>
     );
   };
+
+  // Render licensing information
+  const renderLicensingInfo = () => {
+    if (!creation.status === 'published') return null;
+    
+    if (creation.licensingCost) {
+      return (
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          <div className="flex items-center text-sm font-medium text-green-700">
+            <DollarSign className="h-4 w-4 mr-1" />
+            <span>Licensing Cost: ${creation.licensingCost}</span>
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="mt-3 pt-3 border-t border-gray-200">
+          {!showContactInfo ? (
+            <button 
+              className="text-blue-600 text-sm flex items-center hover:text-blue-800"
+              onClick={toggleContactInfo}
+            >
+              Get in touch with the creator
+            </button>
+          ) : (
+            <div className="text-sm">
+              <p className="font-medium mb-1">Contact information:</p>
+              <div className="flex items-center text-gray-700">
+                <Mail className="h-4 w-4 mr-1" />
+                <a href={`mailto:${currentUser?.email || creation.createdBy}`} className="text-blue-600 hover:underline">
+                  {currentUser?.email || creation.createdBy}
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+  };
   
   return (
     <Card className="creation-card">
@@ -237,6 +291,20 @@ const CreationCard = ({ creation }) => {
           <div className="creation-meta">
             <p className="creation-title">{creation.title}</p>
             <p className="creation-date">{creation.dateCreated}</p>
+            
+            {/* Status Badge */}
+            <div className="mt-1">
+              {creation.status === 'published' ? (
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center w-fit">
+                  <Globe className="h-3 w-3 mr-1" />
+                  Published
+                </span>
+              ) : (
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex items-center w-fit">
+                  Draft
+                </span>
+              )}
+            </div>
             
             {creation.source === 'YouTube' && creation.sourceUrl && (
               <a 
@@ -307,6 +375,9 @@ const CreationCard = ({ creation }) => {
           )}
           
           {hasMetadata && showMetadata && renderMetadataSection()}
+          
+          {/* Show licensing information for published creations */}
+          {creation.status === 'published' && renderLicensingInfo()}
         </div>
         
         <div className="creation-actions">
@@ -318,6 +389,18 @@ const CreationCard = ({ creation }) => {
           >
             <Edit className="button-icon-small" /> Edit
           </Button>
+          
+          {/* Make Public button - only show for draft status */}
+          {creation.status !== 'published' && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleMakePublic}
+              className="publish-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+            >
+              <Globe className="button-icon-small" /> Make Public
+            </Button>
+          )}
           
           <Button 
             variant="destructive" 

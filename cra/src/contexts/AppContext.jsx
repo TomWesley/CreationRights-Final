@@ -54,6 +54,8 @@ export const AppProvider = ({ children }) => {
     notes: '',
     folderId: '',
     tags: [],
+    licensingCost: '',
+    status: 'draft'
   });
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
@@ -351,6 +353,8 @@ export const AppProvider = ({ children }) => {
       notes: '',
       folderId: currentFolder ? currentFolder.id : '',
       tags: [],
+      licensingCost: '',
+      status: 'draft',
       // Conditionally include the metadata
       ...(preserveMetadata && { metadata: currentMetadata })
     });
@@ -382,6 +386,8 @@ export const AppProvider = ({ children }) => {
               ...currentCreation,
               // Ensure metadata is preserved
               metadata: currentCreation.metadata || {},
+              // Format licensingCost as number if provided, or null if empty
+              licensingCost: currentCreation.licensingCost ? parseFloat(currentCreation.licensingCost) : null,
               // Remove the temporary _fileObject if it exists
               _fileObject: undefined 
             } : c
@@ -393,6 +399,10 @@ export const AppProvider = ({ children }) => {
             id: `c${Date.now()}`,
             dateCreated: currentCreation.dateCreated || new Date().toISOString().split('T')[0],
             folderId: currentCreation.folderId || (currentFolder ? currentFolder.id : ''),
+            // Format licensingCost as number if provided, or null if empty
+            licensingCost: currentCreation.licensingCost ? parseFloat(currentCreation.licensingCost) : null,
+            // Add status field with default 'draft'
+            status: 'draft',
             // IMPORTANT: Ensure metadata is explicitly preserved here
             metadata: currentCreation.metadata || {},
             // Add user identifier to the creation
@@ -440,12 +450,16 @@ export const AppProvider = ({ children }) => {
           return;
         }
         
+        // Format licensing cost if provided
+        const licensingCost = creation.licensingCost ? parseFloat(creation.licensingCost) : null;
+        
         console.log('handleSubmit called with creation:', JSON.stringify(creation));
         console.log('Metadata received:', JSON.stringify(metadata));
         
         // Create a new creation object with metadata
         const creationWithMetadata = {
           ...creation,
+          licensingCost,
           metadata: metadata || creation.metadata || {},
           id: creation.id || `c${Date.now()}`,
           dateCreated: creation.dateCreated || new Date().toISOString().split('T')[0],

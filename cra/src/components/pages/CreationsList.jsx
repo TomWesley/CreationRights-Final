@@ -1,7 +1,7 @@
 // src/components/pages/CreationsList.jsx
 
 import React, { useState } from 'react';
-import { Plus, FolderPlus, Search, AlertCircle, Youtube, Upload } from 'lucide-react';
+import { Plus, FolderPlus, Search, AlertCircle, Youtube, Upload, Filter, Globe, FileText } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -143,15 +143,18 @@ const CreationsList = () => {
             </Tabs>
             
             <div className="flex items-center gap-2">
-              <select 
-                className="bg-gray-100 border border-gray-300 text-gray-700 text-sm rounded-md px-2 py-1"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </select>
+              <div className="flex items-center bg-gray-100 rounded-md px-2 py-1">
+                <Filter className="h-4 w-4 text-gray-500 mr-2" />
+                <select 
+                  className="bg-transparent border-none text-gray-700 text-sm pr-6 focus:outline-none focus:ring-0"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="draft">Drafts</option>
+                  <option value="published">Published</option>
+                </select>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -163,7 +166,9 @@ const CreationsList = () => {
               <p className="empty-message">
                 {searchQuery 
                   ? "Try adjusting your search query" 
-                  : "Add your first creation or create a new folder"}
+                  : statusFilter !== 'all'
+                    ? `No ${statusFilter} creations found`
+                    : "Add your first creation or create a new folder"}
               </p>
               <div className="empty-actions">
                 <Button variant="outline" onClick={() => setActiveView('fileUpload')}>
@@ -186,6 +191,30 @@ const CreationsList = () => {
           )}
         </CardContent>
       </Card>
+      
+      {/* Status Legend */}
+      <div className="mt-4 p-4 bg-gray-50 rounded-md">
+        <h3 className="text-sm font-medium mb-2">Status Legend</h3>
+        <div className="flex flex-col space-y-2">
+          <div className="flex items-center">
+            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex items-center w-fit mr-2">
+              Draft
+            </span>
+            <span className="text-sm text-gray-600">
+              Only visible to you. Not shared with your network or agencies.
+            </span>
+          </div>
+          <div className="flex items-center">
+            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center w-fit mr-2">
+              <Globe className="h-3 w-3 mr-1" />
+              Published
+            </span>
+            <span className="text-sm text-gray-600">
+              Publicly visible to your network and connected agencies.
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

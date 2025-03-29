@@ -77,7 +77,8 @@ const MetadataForm = ({ contentType, initialMetadata, onSave, onCancel }) => {
     
     // Check for all fields - making all metadata entries mandatory
     const missing = formFields
-      .filter(field => !formValues[field.key] && !field.auto)
+  // Only check for required fields
+      .filter(field => field.required && !formValues[field.key] && !field.auto)
       .map(field => field.key);
     
     if (missing.length > 0) {
@@ -97,7 +98,7 @@ const MetadataForm = ({ contentType, initialMetadata, onSave, onCancel }) => {
       <div key={field.key} className="mb-4">
         <Label 
           htmlFor={field.key} 
-          className={`${isMissing ? 'text-red-500' : ''} after:content-["*"] after:ml-0.5 after:text-red-500`}
+          className={`${isMissing ? 'text-red-500' : ''} ${field.required ? "after:content-['*'] after:ml-0.5 after:text-red-500" : ""}`}
         >
           {field.label}
         </Label>

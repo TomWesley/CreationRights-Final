@@ -1,10 +1,11 @@
+// Updated Settings.jsx with enhanced profile fields
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
-import { User, Save, Check, Loader2 } from 'lucide-react';
+import { User, Save, Check, Loader2, X, Plus } from 'lucide-react';
 import ProfilePhotoUpload from '../shared/ProfilePhotoUpload';
 import { useAppContext } from '../../contexts/AppContext';
 import { uploadProfilePhoto } from '../../services/fileUpload';
@@ -20,9 +21,37 @@ const Settings = () => {
     bio: currentUser?.bio || '',
     website: currentUser?.website || '',
     location: currentUser?.location || '',
-    photoUrl: currentUser?.photoUrl || null
+    photoUrl: currentUser?.photoUrl || null,
+    specialties: currentUser?.specialties || [],
+    contentTypes: currentUser?.contentTypes || [],
+    status: currentUser?.status || 'active',
+    socialLinks: currentUser?.socialLinks || {},
+    education: currentUser?.education || [],
+    exhibitions: currentUser?.exhibitions || [],
+    awards: currentUser?.awards || []
   });
   const [photoFile, setPhotoFile] = useState(null);
+  const [newSpecialty, setNewSpecialty] = useState('');
+  const [newContentType, setNewContentType] = useState('');
+  const [newEducation, setNewEducation] = useState({ institution: '', degree: '', year: '' });
+  const [newExhibition, setNewExhibition] = useState({ title: '', venue: '', year: '' });
+  const [newAward, setNewAward] = useState({ title: '', year: '', issuer: '' });
+
+  // Content type options
+  const contentTypeOptions = ['Photography', 'Illustration', 'Video', 'Audio', 'Mixed Media', 'Text', 'Digital Art', '3D', 'Animation'];
+  
+  // Specialty options - grouped by content type
+  const specialtyOptions = {
+    Photography: ['Portrait', 'Landscape', 'Product', 'Fashion', 'Event', 'Documentary', 'Street', 'Wildlife', 'Architectural'],
+    Illustration: ['Character Design', 'Concept Art', 'Editorial', 'Book', 'Comic', 'Fantasy', 'Fashion'],
+    Video: ['Short Film', 'Music Video', 'Documentary', 'Commercial', 'Experimental', 'Animation'],
+    Audio: ['Music Production', 'Sound Design', 'Podcasting', 'Voice Over', 'Composition'],
+    'Mixed Media': ['Collage', 'Installation', 'Performance', 'Interactive'],
+    Text: ['Copywriting', 'Journalism', 'Creative Writing', 'Poetry', 'Script Writing'],
+    'Digital Art': ['UI/UX', 'NFT', 'Generative Art', 'Graphic Design', 'Motion Graphics'],
+    '3D': ['Modeling', 'Texturing', 'Animation', 'Rendering', 'Game Assets'],
+    Animation: ['2D Animation', '3D Animation', 'Motion Graphics', 'Stop Motion', 'Character Animation']
+  };
 
   // Handle input changes
   const handleInputChange = (e) => {
@@ -40,22 +69,114 @@ const Settings = () => {
       ...prev,
       photoUrl: url
     }));
-    
     console.log('Photo changed:', { file, url });
   };
 
-  // Log the current photo URL for debugging
-  useEffect(() => {
-    if (currentUser?.photoUrl) {
-      console.log('Current user photo URL:', currentUser.photoUrl);
-      
-      // Test if the URL is valid and accessible
-      const img = new Image();
-      img.onload = () => console.log('Image loaded successfully');
-      img.onerror = () => console.error('Failed to load image from URL:', currentUser.photoUrl);
-      img.src = currentUser.photoUrl;
+  // Handle adding a specialty
+  const handleAddSpecialty = () => {
+    if (newSpecialty && !profileData.specialties.includes(newSpecialty)) {
+      setProfileData(prev => ({
+        ...prev,
+        specialties: [...prev.specialties, newSpecialty]
+      }));
+      setNewSpecialty('');
     }
-  }, [currentUser?.photoUrl]);
+  };
+
+  // Handle removing a specialty
+  const handleRemoveSpecialty = (specialty) => {
+    setProfileData(prev => ({
+      ...prev,
+      specialties: prev.specialties.filter(s => s !== specialty)
+    }));
+  };
+
+  // Handle adding a content type
+  const handleAddContentType = () => {
+    if (newContentType && !profileData.contentTypes.includes(newContentType)) {
+      setProfileData(prev => ({
+        ...prev,
+        contentTypes: [...prev.contentTypes, newContentType]
+      }));
+      setNewContentType('');
+    }
+  };
+
+  // Handle removing a content type
+  const handleRemoveContentType = (contentType) => {
+    setProfileData(prev => ({
+      ...prev,
+      contentTypes: prev.contentTypes.filter(c => c !== contentType)
+    }));
+  };
+
+  // Handle adding education
+  const handleAddEducation = () => {
+    if (newEducation.institution && newEducation.degree) {
+      setProfileData(prev => ({
+        ...prev,
+        education: [...prev.education, newEducation]
+      }));
+      setNewEducation({ institution: '', degree: '', year: '' });
+    }
+  };
+
+  // Handle removing education
+  const handleRemoveEducation = (index) => {
+    setProfileData(prev => ({
+      ...prev,
+      education: prev.education.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Handle adding exhibition
+  const handleAddExhibition = () => {
+    if (newExhibition.title && newExhibition.venue) {
+      setProfileData(prev => ({
+        ...prev,
+        exhibitions: [...prev.exhibitions, newExhibition]
+      }));
+      setNewExhibition({ title: '', venue: '', year: '' });
+    }
+  };
+
+  // Handle removing exhibition
+  const handleRemoveExhibition = (index) => {
+    setProfileData(prev => ({
+      ...prev,
+      exhibitions: prev.exhibitions.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Handle adding award
+  const handleAddAward = () => {
+    if (newAward.title) {
+      setProfileData(prev => ({
+        ...prev,
+        awards: [...prev.awards, newAward]
+      }));
+      setNewAward({ title: '', year: '', issuer: '' });
+    }
+  };
+
+  // Handle removing award
+  const handleRemoveAward = (index) => {
+    setProfileData(prev => ({
+      ...prev,
+      awards: prev.awards.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Handle social link changes
+  const handleSocialLinkChange = (platform, value) => {
+    setProfileData(prev => ({
+      ...prev,
+      socialLinks: {
+        ...prev.socialLinks,
+        [platform]: value
+      }
+    }));
+  };
 
   // Handle form submission
   const handleSubmit = async (e) => {
@@ -66,17 +187,11 @@ const Settings = () => {
     try {
       let photoUrlToSave = profileData.photoUrl;
       
-      // If there's a new photo file, upload it to Google Cloud Storage
+      // If there's a new photo file, upload it
       if (photoFile) {
         try {
           photoUrlToSave = await uploadProfilePhoto(currentUser.email, photoFile);
           console.log('Photo uploaded successfully:', photoUrlToSave);
-          
-          // Verify the URL is accessible
-          const isValid = await isImageUrlValid(photoUrlToSave);
-          if (!isValid) {
-            console.warn('Uploaded image URL may not be accessible:', photoUrlToSave);
-          }
         } catch (photoError) {
           console.error('Error uploading photo:', photoError);
           // Continue with the local URL if upload fails
@@ -86,14 +201,11 @@ const Settings = () => {
       // Create updated user object
       const updatedUser = {
         ...currentUser,
-        name: profileData.name,
-        bio: profileData.bio,
-        website: profileData.website,
-        location: profileData.location,
+        ...profileData,
         photoUrl: photoUrlToSave
       };
       
-      // Save directly using the API
+      // Save using the API
       await saveUserData(updatedUser.email, updatedUser);
       
       // Update local state (in context)
@@ -121,16 +233,6 @@ const Settings = () => {
     } finally {
       setIsUploading(false);
     }
-  };
-  
-  // Helper function to check if an image URL is valid
-  const isImageUrlValid = (url) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = url;
-    });
   };
 
   return (
@@ -213,13 +315,322 @@ const Settings = () => {
                 Your bio will be visible to collaborators and agencies
               </p>
             </div>
+
+            {/* Content Types Section */}
+            <div className="border p-4 rounded-md">
+              <Label className="text-lg font-medium mb-2 block">Content Types</Label>
+              <p className="text-sm text-gray-500 mb-3">Select the types of content you create</p>
+              
+              <div className="flex flex-wrap gap-2 mb-3">
+                {profileData.contentTypes.map((contentType, index) => (
+                  <div key={index} className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center">
+                    <span>{contentType}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => handleRemoveContentType(contentType)}
+                      className="ml-1 text-blue-600 hover:text-blue-800"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-2">
+                <select
+                  value={newContentType}
+                  onChange={(e) => setNewContentType(e.target.value)}
+                  className="flex-grow rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select a content type</option>
+                  {contentTypeOptions.map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <Button 
+                  type="button" 
+                  onClick={handleAddContentType}
+                  disabled={!newContentType}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </div>
+            </div>
+            
+            {/* Specialties Section */}
+            <div className="border p-4 rounded-md">
+              <Label className="text-lg font-medium mb-2 block">Specialties</Label>
+              <p className="text-sm text-gray-500 mb-3">Add your specific skills and specialties</p>
+              
+              <div className="flex flex-wrap gap-2 mb-3">
+                {profileData.specialties.map((specialty, index) => (
+                  <div key={index} className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full flex items-center">
+                    <span>{specialty}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => handleRemoveSpecialty(specialty)}
+                      className="ml-1 text-purple-600 hover:text-purple-800"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-2">
+                <select
+                  value={newSpecialty}
+                  onChange={(e) => setNewSpecialty(e.target.value)}
+                  className="flex-grow rounded-md border border-gray-300 p-2"
+                >
+                  <option value="">Select a specialty</option>
+                  {profileData.contentTypes.length > 0 ? (
+                    profileData.contentTypes.map(contentType => (
+                      <optgroup key={contentType} label={contentType}>
+                        {specialtyOptions[contentType]?.map(specialty => (
+                          <option key={specialty} value={specialty}>{specialty}</option>
+                        ))}
+                      </optgroup>
+                    ))
+                  ) : (
+                    <option value="" disabled>Please select content types first</option>
+                  )}
+                </select>
+                <Button 
+                  type="button" 
+                  onClick={handleAddSpecialty}
+                  disabled={!newSpecialty}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add
+                </Button>
+              </div>
+            </div>
+            
+            {/* Social Media Links */}
+            <div className="border p-4 rounded-md">
+              <Label className="text-lg font-medium mb-2 block">Social Media</Label>
+              <p className="text-sm text-gray-500 mb-3">Connect your social profiles</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="instagram">Instagram</Label>
+                  <Input 
+                    id="instagram" 
+                    value={profileData.socialLinks?.instagram || ''} 
+                    onChange={(e) => handleSocialLinkChange('instagram', e.target.value)}
+                    placeholder="Your Instagram handle"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="twitter">Twitter</Label>
+                  <Input 
+                    id="twitter" 
+                    value={profileData.socialLinks?.twitter || ''} 
+                    onChange={(e) => handleSocialLinkChange('twitter', e.target.value)}
+                    placeholder="Your Twitter handle"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="behance">Behance</Label>
+                  <Input 
+                    id="behance" 
+                    value={profileData.socialLinks?.behance || ''} 
+                    onChange={(e) => handleSocialLinkChange('behance', e.target.value)}
+                    placeholder="Your Behance URL"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="linkedin">LinkedIn</Label>
+                  <Input 
+                    id="linkedin" 
+                    value={profileData.socialLinks?.linkedin || ''} 
+                    onChange={(e) => handleSocialLinkChange('linkedin', e.target.value)}
+                    placeholder="Your LinkedIn URL"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Education Section */}
+            <div className="border p-4 rounded-md">
+              <Label className="text-lg font-medium mb-2 block">Education</Label>
+              <p className="text-sm text-gray-500 mb-3">Add your educational background</p>
+              
+              {profileData.education.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {profileData.education.map((edu, index) => (
+                    <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
+                      <div>
+                        <p className="font-medium">{edu.institution}</p>
+                        <p className="text-sm text-gray-600">{edu.degree} {edu.year ? `(${edu.year})` : ''}</p>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => handleRemoveEducation(index)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-1">
+                  <Input 
+                    placeholder="Institution"
+                    value={newEducation.institution}
+                    onChange={(e) => setNewEducation({...newEducation, institution: e.target.value})}
+                  />
+                </div>
+                <div className="md:col-span-1">
+                  <Input 
+                    placeholder="Degree/Field of Study"
+                    value={newEducation.degree}
+                    onChange={(e) => setNewEducation({...newEducation, degree: e.target.value})}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="Year"
+                    value={newEducation.year}
+                    onChange={(e) => setNewEducation({...newEducation, year: e.target.value})}
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={handleAddEducation}
+                    disabled={!newEducation.institution || !newEducation.degree}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Exhibitions/Shows Section */}
+            <div className="border p-4 rounded-md">
+              <Label className="text-lg font-medium mb-2 block">Exhibitions & Shows</Label>
+              <p className="text-sm text-gray-500 mb-3">Add your past exhibitions, shows or featured work</p>
+              
+              {profileData.exhibitions.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {profileData.exhibitions.map((exhibition, index) => (
+                    <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
+                      <div>
+                        <p className="font-medium">{exhibition.title}</p>
+                        <p className="text-sm text-gray-600">{exhibition.venue} {exhibition.year ? `(${exhibition.year})` : ''}</p>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => handleRemoveExhibition(index)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-1">
+                  <Input 
+                    placeholder="Exhibition/Show Title"
+                    value={newExhibition.title}
+                    onChange={(e) => setNewExhibition({...newExhibition, title: e.target.value})}
+                  />
+                </div>
+                <div className="md:col-span-1">
+                  <Input 
+                    placeholder="Venue/Gallery"
+                    value={newExhibition.venue}
+                    onChange={(e) => setNewExhibition({...newExhibition, venue: e.target.value})}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="Year"
+                    value={newExhibition.year}
+                    onChange={(e) => setNewExhibition({...newExhibition, year: e.target.value})}
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={handleAddExhibition}
+                    disabled={!newExhibition.title || !newExhibition.venue}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Awards Section */}
+            <div className="border p-4 rounded-md">
+              <Label className="text-lg font-medium mb-2 block">Awards & Recognition</Label>
+              <p className="text-sm text-gray-500 mb-3">Add awards, grants or other recognition you've received</p>
+              
+              {profileData.awards.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {profileData.awards.map((award, index) => (
+                    <div key={index} className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
+                      <div>
+                        <p className="font-medium">{award.title}</p>
+                        <p className="text-sm text-gray-600">{award.issuer} {award.year ? `(${award.year})` : ''}</p>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => handleRemoveAward(index)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-1">
+                  <Input 
+                    placeholder="Award/Recognition Title"
+                    value={newAward.title}
+                    onChange={(e) => setNewAward({...newAward, title: e.target.value})}
+                  />
+                </div>
+                <div className="md:col-span-1">
+                  <Input 
+                    placeholder="Issuing Organization"
+                    value={newAward.issuer}
+                    onChange={(e) => setNewAward({...newAward, issuer: e.target.value})}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="Year"
+                    value={newAward.year}
+                    onChange={(e) => setNewAward({...newAward, year: e.target.value})}
+                  />
+                  <Button 
+                    type="button" 
+                    onClick={handleAddAward}
+                    disabled={!newAward.title}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
             
             <div className="flex items-center justify-between">
               <Button type="submit" className="save-profile-button" disabled={isUploading}>
                 {isUploading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Uploading...
+                    Saving...
                   </>
                 ) : (
                   <>
@@ -237,29 +648,6 @@ const Settings = () => {
               )}
             </div>
           </form>
-        </CardContent>
-      </Card>
-      
-      <Card className="settings-card">
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="password-settings">
-            <div>
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input id="currentPassword" type="password" />
-            </div>
-            <div>
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input id="newPassword" type="password" />
-            </div>
-            <div>
-              <Label htmlFor="confirmPassword">Confirm New Password</Label>
-              <Input id="confirmPassword" type="password" />
-            </div>
-            <Button className="password-button">Update Password</Button>
-          </div>
         </CardContent>
       </Card>
       

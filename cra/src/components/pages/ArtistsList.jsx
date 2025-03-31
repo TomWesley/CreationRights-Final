@@ -1,5 +1,4 @@
-// src/components/pages/ArtistsList.jsx
-
+// src/components/pages/ArtistsList.jsx - Simplified version
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, User, Sort, ChevronDown, Mail, ExternalLink, Star, MessageSquare, BookmarkPlus } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../ui/card';
@@ -9,102 +8,84 @@ import { useAppContext } from '../../contexts/AppContext';
 
 const ArtistsList = () => {
   const { isLoading, setIsLoading } = useAppContext();
-  
-  // Sample creators data - would be fetched from API in real implementation
-  const [creators, setCreators] = useState([
-    {
-      id: 'creator1',
-      name: 'Michael Rodriguez',
-      email: 'michael@creationrights.com',
-      bio: 'Photographer and visual artist specializing in street photography and urban landscapes.',
-      website: 'https://michaelrodriguez.com',
-      location: 'New York, NY',
-      specialties: ['Photography', 'Visual Art'],
-      joinedDate: '2023-10-15',
-      publicCreations: 12,
-      featured: true
-    },
-    {
-      id: 'creator2',
-      name: 'Sarah Chen',
-      email: 'sarah@creationrights.com',
-      bio: 'Writer and poet focusing on modern life narratives and cultural identity.',
-      website: 'https://sarahchen.com',
-      location: 'San Francisco, CA',
-      specialties: ['Writing', 'Poetry'],
-      joinedDate: '2023-11-20',
-      publicCreations: 8,
-      featured: false
-    },
-    {
-      id: 'creator3',
-      name: 'James Wilson',
-      email: 'james@creationrights.com',
-      bio: 'Audio producer and sound designer with experience in film and interactive media.',
-      website: 'https://jameswilson.audio',
-      location: 'Los Angeles, CA',
-      specialties: ['Audio', 'Sound Design', 'Music'],
-      joinedDate: '2024-01-05',
-      publicCreations: 15,
-      featured: true
-    },
-    {
-      id: 'creator4',
-      name: 'Elena Martinez',
-      email: 'elena@creationrights.com',
-      bio: 'Digital artist and animator creating immersive experiences and interactive installations.',
-      website: 'https://elenamartinez.art',
-      location: 'Chicago, IL',
-      specialties: ['Digital Art', 'Animation'],
-      joinedDate: '2024-02-10',
-      publicCreations: 6,
-      featured: false
-    },
-    {
-      id: 'creator5',
-      name: 'David Kim',
-      email: 'david@creationrights.com',
-      bio: 'Filmmaker and documentary producer focusing on social and environmental issues.',
-      website: 'https://davidkim.media',
-      location: 'Austin, TX',
-      specialties: ['Film', 'Documentary'],
-      joinedDate: '2023-12-18',
-      publicCreations: 10,
-      featured: true
-    }
-  ]);
-  
-  // State for filtered creators
-  const [filteredCreators, setFilteredCreators] = useState(creators);
+  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+  // State for artists data
+  const [artists, setArtists] = useState([]);
+  const [filteredArtists, setFilteredArtists] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [specialtyFilter, setSpecialtyFilter] = useState('');
-  const [sortField, setSortField] = useState('joinedDate');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortField, setSortField] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
   const [showFilters, setShowFilters] = useState(false);
+  const [error, setError] = useState(null);
+  
+  // Fetch artists data
+  useEffect(() => {
+    const fetchArtists = async () => {
+      setIsLoading(true);
+      console.log("foo")
+      try {
+        const response = await fetch(`${API_URL}/api/users`)
+        if (!response.ok) {
+          throw new Error(`Failed to fetch artists: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Transform the data to fit our component's needs
+        const transformedData = data.map(user => ({
+          id: user.id || user.email,
+          name: user.name || (user.email ? user.email.split('@')[0] : 'Unknown'),
+          email: user.email || 'No email provided',
+          bio: user.bio || 'No bio available',
+          website: user.website || '',
+          location: user.location || 'Unknown location',
+          specialties: user.specialties || ['Content Creator'],
+          joinedDate: user.createdAt || new Date().toISOString(),
+          publicCreations: 0, // Default value as we're not calculating this now
+          featured: Math.random() > 0.7, // Randomly mark some as featured for demo
+          photoUrl: user.photoUrl || '',
+          status: user.status || 'active'
+        }));
+        
+        setArtists(transformedData);
+        setFilteredArtists(transformedData);
+      } catch (err) {
+        console.error('Error fetching artists:', err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchArtists();
+  }, [setIsLoading]);
   
   // Extract all unique specialties for filter dropdown
-  const allSpecialties = [...new Set(creators.flatMap(creator => creator.specialties))].sort();
+  const allSpecialties = [...new Set(artists.flatMap(artist => artist.specialties))].sort();
   
   // Apply filtering and sorting
   useEffect(() => {
-    let filtered = [...creators];
+    let filtered = [...artists];
     
     // Apply search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(creator => 
-        creator.name.toLowerCase().includes(query) ||
-        creator.bio.toLowerCase().includes(query) ||
-        creator.location.toLowerCase().includes(query) ||
-        creator.email.toLowerCase().includes(query) ||
-        creator.specialties.some(specialty => specialty.toLowerCase().includes(query))
+      filtered = filtered.filter(artist => 
+        artist.name.toLowerCase().includes(query) ||
+        (artist.bio && artist.bio.toLowerCase().includes(query)) ||
+        (artist.location && artist.location.toLowerCase().includes(query)) ||
+        artist.email.toLowerCase().includes(query) ||
+        (artist.specialties && artist.specialties.some(specialty => 
+          specialty.toLowerCase().includes(query)
+        ))
       );
     }
     
     // Apply specialty filter
     if (specialtyFilter) {
-      filtered = filtered.filter(creator => 
-        creator.specialties.some(specialty => 
+      filtered = filtered.filter(artist => 
+        artist.specialties && artist.specialties.some(specialty => 
           specialty.toLowerCase() === specialtyFilter.toLowerCase()
         )
       );
@@ -116,8 +97,8 @@ const ArtistsList = () => {
       
       switch (sortField) {
         case 'name':
-          aValue = a.name;
-          bValue = b.name;
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
           break;
         case 'joinedDate':
           aValue = new Date(a.joinedDate);
@@ -139,8 +120,8 @@ const ArtistsList = () => {
       }
     });
     
-    setFilteredCreators(filtered);
-  }, [creators, searchQuery, specialtyFilter, sortField, sortDirection]);
+    setFilteredArtists(filtered);
+  }, [artists, searchQuery, specialtyFilter, sortField, sortDirection]);
   
   // Toggle sort direction
   const handleSort = (field) => {
@@ -148,10 +129,10 @@ const ArtistsList = () => {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection('asc');
     }
   };
-  
+
   return (
     <div className="artists-view">
       <div className="artists-header mb-4">
@@ -226,17 +207,6 @@ const ArtistsList = () => {
                       sortDirection === 'asc' ? '↑' : '↓'
                     )}
                   </Button>
-                  
-                  <Button 
-                    variant={sortField === 'publicCreations' ? 'default' : 'outline'} 
-                    size="sm"
-                    onClick={() => handleSort('publicCreations')}
-                    className="flex items-center"
-                  >
-                    Creations {sortField === 'publicCreations' && (
-                      sortDirection === 'asc' ? '↑' : '↓'
-                    )}
-                  </Button>
                 </div>
               </div>
             </div>
@@ -250,7 +220,14 @@ const ArtistsList = () => {
           <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
           <p className="mt-4 text-gray-500">Loading artists...</p>
         </div>
-      ) : filteredCreators.length === 0 ? (
+      ) : error ? (
+        <div className="text-center py-8 bg-red-50 rounded-lg p-6">
+          <User className="h-12 w-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium mb-2">Error Loading Artists</h3>
+          <p className="text-red-700 mb-4">{error}</p>
+          <Button onClick={() => window.location.reload()}>Try Again</Button>
+        </div>
+      ) : filteredArtists.length === 0 ? (
         <div className="text-center py-8">
           <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">No Artists Found</h3>
@@ -262,13 +239,13 @@ const ArtistsList = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredCreators.map(creator => (
-            <Card key={creator.id} className={creator.featured ? 'border-2 border-blue-500' : ''}>
+          {filteredArtists.map(artist => (
+            <Card key={artist.id} className={artist.featured ? 'border-2 border-blue-500' : ''}>
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg flex items-center">
-                    {creator.name}
-                    {creator.featured && (
+                    {artist.name}
+                    {artist.featured && (
                       <Star className="h-4 w-4 text-blue-500 ml-1" fill="currentColor" />
                     )}
                   </CardTitle>
@@ -282,30 +259,30 @@ const ArtistsList = () => {
               
               <CardContent className="pb-2">
                 <div className="text-sm space-y-2">
-                  <p className="text-gray-700">{creator.bio}</p>
+                  <p className="text-gray-700">{artist.bio}</p>
                   
                   <div className="text-gray-500">
                     <p className="flex items-center text-xs">
                       <Mail className="h-3 w-3 mr-1" />
-                      {creator.email}
+                      {artist.email}
                     </p>
-                    {creator.website && (
+                    {artist.website && (
                       <p className="flex items-center text-xs">
                         <ExternalLink className="h-3 w-3 mr-1" />
-                        <a href={creator.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                          {creator.website.replace(/(^\w+:|^)\/\//, '')}
+                        <a href={artist.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                          {artist.website.replace(/(^\w+:|^)\/\//, '')}
                         </a>
                       </p>
                     )}
-                    {creator.location && (
-                      <p className="text-xs mt-1">Location: {creator.location}</p>
+                    {artist.location && (
+                      <p className="text-xs mt-1">Location: {artist.location}</p>
                     )}
                   </div>
                   
                   <div>
                     <p className="text-xs font-medium text-gray-700 mb-1">Specialties:</p>
                     <div className="flex flex-wrap gap-1">
-                      {creator.specialties.map(specialty => (
+                      {artist.specialties.map(specialty => (
                         <span 
                           key={specialty} 
                           className="text-xs bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full"
@@ -317,8 +294,7 @@ const ArtistsList = () => {
                   </div>
                   
                   <div className="flex justify-between text-xs text-gray-500 pt-2">
-                    <span>Joined: {new Date(creator.joinedDate).toLocaleDateString()}</span>
-                    <span>{creator.publicCreations} public works</span>
+                    <span>Joined: {new Date(artist.joinedDate).toLocaleDateString()}</span>
                   </div>
                 </div>
               </CardContent>

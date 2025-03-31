@@ -158,8 +158,8 @@ app.post('/api/instagram/convert', async (req, res) => {
 
 // Endpoint to fetch users by type
 app.get('/api/users', async (req, res) => {
+  console.log("here")
   try {
-    const userType = req.query.type || '';
     const bucket = storage.bucket(BUCKET_NAME);
     
     // List all files in the users directory
@@ -167,7 +167,7 @@ app.get('/api/users', async (req, res) => {
     
     // Filter for user profile files
     const userInfoFiles = files.filter(file => file.name.endsWith('/profile/info.json'));
-    
+    console.log(userInfoFiles)
     // Array to store user data
     const users = [];
     
@@ -178,37 +178,16 @@ app.get('/api/users', async (req, res) => {
         const [content] = await file.download();
         const userData = JSON.parse(content.toString());
         
-        // If a type filter was specified, only include users of that type
-        if (!userType || userData.userType === userType) {
-          // Get username from file path (users/username/profile/info.json)
-          const pathParts = file.name.split('/');
-          const username = pathParts[1];
-          
-          // Get total works count
-          let totalWorks = 0;
-          try {
-            const creationsFile = bucket.file(`users/${username}/creations/metadata/all.json`);
-            const [exists] = await creationsFile.exists();
-            
-            if (exists) {
-              const [creationsContent] = await creationsFile.download();
-              const creationsData = JSON.parse(creationsContent.toString());
-              totalWorks = creationsData.length || 0;
-            }
-          } catch (err) {
-            console.error(`Error getting work count for user ${username}:`, err);
-          }
-          
-          // Enhance user data with additional info
-          const enhancedUserData = {
-            ...userData,
-            totalWorks,
-            // Determine content types from their creations
-            contentTypes: []
-          };
-          
-          users.push(enhancedUserData);
-        }
+        // Get username from file path (users/username/profile/info.json)
+        const pathParts = file.name.split('/');
+        const username = pathParts[1];
+        
+        // Add the user data to the array
+        users.push({
+          ...userData,
+          id: username, // Use the username as ID
+          status: 'active' // Default status
+        });
       } catch (err) {
         console.error(`Error processing user file ${file.name}:`, err);
       }

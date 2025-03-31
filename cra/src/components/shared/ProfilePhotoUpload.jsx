@@ -1,15 +1,27 @@
-// src/components/shared/ProfilePhotoUpload.jsx
-
-import React, { useState, useRef } from 'react';
+// Improve the ProfilePhotoUpload.jsx component
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useAppContext } from '../../contexts/AppContext';
 
 const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
-  const [previewUrl, setPreviewUrl] = useState(currentPhoto || null);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   
+  // Initialize preview when component mounts or currentPhoto changes
+  useEffect(() => {
+    if (currentPhoto) {
+      setPreviewUrl(currentPhoto);
+    }
+    
+    // Cleanup function to avoid memory leaks
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [currentPhoto]);
+
   // Handle file selection via button
   const handleFileSelect = () => {
     fileInputRef.current.click();
@@ -43,15 +55,23 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
     
     // Create preview URL
     const url = URL.createObjectURL(file);
+    
+    // If there was a previous preview, revoke it to prevent memory leaks
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    
     setPreviewUrl(url);
     
     // Call the callback with the new file
     onPhotoChange(file, url);
+    
+    console.log('Photo selected:', { file, url });
   };
 
   // Handle removing the photo
   const handleRemovePhoto = () => {
-    if (previewUrl) {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
       URL.revokeObjectURL(previewUrl);
     }
     
@@ -104,15 +124,27 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
             src={previewUrl} 
             alt="Profile" 
             className="w-40 h-40 rounded-full object-cover border border-gray-200"
+            onError={(e) => {
+              console.error("Profile image failed to load:", previewUrl);
+              // If the image fails to load, show a placeholder
+              e.target.style.display = 'none';
+              const parent = e.target.parentElement;
+              const placeholder = document.createElement('div');
+              placeholder.className = "w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center";
+              placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8 text-gray-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
+              parent.appendChild(placeholder);
+            }}
           />
           <button 
-            className="absolute bottom-0 right-0 bg-red-500 text-white p-1 rounded-full"
+            type="button"
+            className="absolute bottom-0 right-0 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
             onClick={handleRemovePhoto}
           >
             <X className="h-4 w-4" />
           </button>
           <button 
-            className="absolute bottom-0 left-0 bg-blue-500 text-white p-1 rounded-full"
+            type="button"
+            className="absolute bottom-0 left-0 bg-blue-500 text-white p-1 rounded-full hover:bg-blue-600 transition-colors"
             onClick={handleFileSelect}
           >
             <Camera className="h-4 w-4" />

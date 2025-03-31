@@ -45,18 +45,29 @@ const AppHeader = () => {
         </div>
         
         <div className="header-right">
+        
           <div className="user-info flex items-center cursor-pointer" onClick={() => setActiveView('profile')}>
             {currentUser?.photoUrl ? (
               <img 
                 src={currentUser.photoUrl} 
                 alt={formatDisplayName(currentUser?.email)} 
                 className="w-8 h-8 rounded-full mr-2 object-cover border border-gray-200"
+                onError={(e) => {
+                  // Fallback to user icon if image fails to load
+                  e.target.style.display = 'none';
+                  e.target.nextElementSibling.style.display = 'flex';
+                }}
               />
             ) : (
               <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
                 <User className="h-4 w-4 text-gray-500" />
               </div>
             )}
+            {/* Add this as fallback that's initially hidden */}
+            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2" 
+                style={{display: 'none'}}>
+              <User className="h-4 w-4 text-gray-500" />
+            </div>
             <div>
               <span className="flex items-center">
                 <span className="user-name">{currentUser?.name || formatDisplayName(currentUser?.email)}</span>

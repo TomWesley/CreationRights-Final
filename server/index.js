@@ -576,6 +576,8 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
 });
 
 // Profile photo upload endpoint
+// Modify the profile photo upload endpoint in server/index.js
+// Replace the uploadProfilePhoto endpoint in server/index.js
 app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -587,29 +589,28 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
     
     // Only allow image files for profile photos
     if (!file.mimetype.startsWith('image/')) {
-      // Clean up the uploaded file
-      fs.unlinkSync(file.path);
       return res.status(400).json({ error: 'Only image files are allowed for profile photos' });
     }
     
     // Create file info object
     const fileInfo = {
       originalName: file.originalname,
-      filename: file.filename,
+      filename: file.originalname,
       mimetype: file.mimetype,
-      size: file.size,
-      path: file.path
+      size: file.size
     };
     
     // Upload to Google Cloud Storage
     if (storage) {
       try {
         const bucket = storage.bucket(BUCKET_NAME);
-        const gcsFilePath = `users/${userId}/profile/photo.${path.extname(file.filename).substring(1)}`;
+        const gcsFilePath = `users/${userId}/profile/photo${path.extname(file.originalname)}`;
         
-        // Upload to GCS
-        await bucket.upload(file.path, {
-          destination: gcsFilePath,
+        // Create a file in the bucket
+        const gcsFile = bucket.file(gcsFilePath);
+        
+        // Create a write stream
+        const stream = gcsFile.createWriteStream({
           metadata: {
             contentType: file.mimetype,
             cacheControl: 'no-cache, max-age=0'
@@ -617,13 +618,26 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
           public: true
         });
         
-        // Generate public URL
-        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
-        fileInfo.gcsUrl = publicUrl;
-        fileInfo.url = publicUrl;
+        // Handle errors and completion
+        const streamPromise = new Promise((resolve, reject) => {
+          stream.on('error', (err) => {
+            console.error('Error uploading profile photo to GCS:', err);
+            reject(err);
+          });
+          
+          stream.on('finish', () => {
+            const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+            fileInfo.gcsUrl = publicUrl;
+            fileInfo.url = publicUrl;
+            resolve();
+          });
+        });
         
-        // Clean up local file after successful upload
-        fs.unlinkSync(file.path);
+        // Write the buffer to the stream
+        stream.end(file.buffer);
+        
+        // Wait for the stream to finish
+        await streamPromise;
         
         // Update user data with the new profile photo URL
         try {
@@ -635,7 +649,7 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
             const userData = JSON.parse(content.toString());
             
             // Update the photo URL
-            userData.photoUrl = publicUrl;
+            userData.photoUrl = fileInfo.gcsUrl;
             
             // Save the updated user data
             await userInfoFile.save(JSON.stringify(userData), {
@@ -647,14 +661,11 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         }
       } catch (gcsError) {
         console.error('Error uploading profile photo to GCS:', gcsError);
-        // Fall back to local file URL if GCS upload fails
-        const localUrl = `/uploads/${userId}/profile/${file.filename}`;
-        fileInfo.url = localUrl;
+        return res.status(500).json({ error: 'Failed to upload to cloud storage' });
       }
     } else {
-      // If no GCS, use local file path
-      const localUrl = `/uploads/${userId}/profile/${file.filename}`;
-      fileInfo.url = localUrl;
+      // No GCS available
+      return res.status(500).json({ error: 'Cloud storage not available' });
     }
     
     res.status(200).json({

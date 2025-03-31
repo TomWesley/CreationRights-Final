@@ -31,6 +31,7 @@ const Settings = () => {
     awards: currentUser?.awards || []
   });
   const [photoFile, setPhotoFile] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [newSpecialty, setNewSpecialty] = useState('');
   const [newContentType, setNewContentType] = useState('');
   const [newEducation, setNewEducation] = useState({ institution: '', degree: '', year: '' });
@@ -182,7 +183,7 @@ const Settings = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    setIsUploading(true);
+    setIsLoading(true);
     
     try {
       let photoUrlToSave = profileData.photoUrl;
@@ -190,6 +191,7 @@ const Settings = () => {
       // If there's a new photo file, upload it
       if (photoFile) {
         try {
+          console.log("Uploading profile photo...");
           photoUrlToSave = await uploadProfilePhoto(currentUser.email, photoFile);
           console.log('Photo uploaded successfully:', photoUrlToSave);
         } catch (photoError) {
@@ -198,12 +200,14 @@ const Settings = () => {
         }
       }
       
-      // Create updated user object
+      // Create updated user object with the new photo URL
       const updatedUser = {
         ...currentUser,
         ...profileData,
         photoUrl: photoUrlToSave
       };
+      
+      console.log("Saving user data with photo:", photoUrlToSave);
       
       // Save using the API
       await saveUserData(updatedUser.email, updatedUser);
@@ -231,7 +235,7 @@ const Settings = () => {
       console.error('Error updating profile:', error);
       alert('Failed to update profile. Please try again.');
     } finally {
-      setIsUploading(false);
+      setIsLoading(false);
     }
   };
 

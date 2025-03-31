@@ -232,18 +232,22 @@ const mapTypeToMetadataCategory = (fileType) => {
  * @param {File} photoFile - Photo file to upload
  * @returns {Promise<Object>} - Response with file info
  */
+// Update this function in src/services/fileUpload.js
+// Update this function in src/services/fileUpload.js
 export const uploadProfilePhoto = async (userId, photoFile) => {
   try {
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    // Fix API URL format - make sure it doesn't have trailing slashes
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
     const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    console.log(`Uploading profile photo to ${API_URL}/api/users/${sanitizedUserId}/profile-photo`);
     
     // Create form data
     const formData = new FormData();
     formData.append('file', photoFile);
-    formData.append('type', 'profile');  // Mark this as a profile photo
     
-    // Send request
-    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/profile-photo`, {
+    // Send request - notice the path is now /api/users/...
+    const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/profile-photo`, {
       method: 'POST',
       body: formData,
     });
@@ -253,7 +257,10 @@ export const uploadProfilePhoto = async (userId, photoFile) => {
       throw new Error(errorData.error || `Upload failed with status ${response.status}`);
     }
     
-    return await response.json();
+    const result = await response.json();
+    
+    // Return the URL - prefer GCS URL if available
+    return result.file.gcsUrl || result.file.url;
   } catch (error) {
     console.error('Error uploading profile photo:', error);
     throw error;

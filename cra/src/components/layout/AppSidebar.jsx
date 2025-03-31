@@ -1,5 +1,7 @@
+// src/components/layout/AppSidebar.jsx
+
 import React from 'react';
-import { Home, FileText, Users, Settings, MessageSquare } from 'lucide-react';
+import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck } from 'lucide-react';
 import FolderStructure from '../shared/FolderStructure';
 import { useAppContext } from '../../contexts/AppContext';
 
@@ -13,6 +15,8 @@ const AppSidebar = () => {
     setCurrentFolder,
     setBreadcrumbs
   } = useAppContext();
+  
+  const isAgency = userType === 'agency';
   
   return (
     <>
@@ -34,21 +38,23 @@ const AppSidebar = () => {
             
             <div className="nav-group">
               <button
-                className={`nav-item ${activeView === 'myCreations' ? 'nav-active' : ''}`}
+                className={`nav-item ${activeView === 'myCreations' || activeView === 'allCreations' ? 'nav-active' : ''}`}
                 onClick={() => {
                   setCurrentFolder(null);
                   setBreadcrumbs([]);
-                  setActiveView('myCreations');
+                  setActiveView(isAgency ? 'allCreations' : 'myCreations');
                   setIsMobileMenuOpen(false);
                 }}
               >
                 <FileText className="nav-icon" />
-                My Creations
+                {isAgency ? 'Creations' : 'My Creations'}
               </button>
               
-              <div className="folder-tree">
-                <FolderStructure />
-              </div>
+              {!isAgency && (
+                <div className="folder-tree">
+                  <FolderStructure />
+                </div>
+              )}
             </div>
             
             <div>
@@ -77,7 +83,7 @@ const AppSidebar = () => {
               </button>
             </div>
             
-            {userType === 'agency' && (
+            {isAgency && (
               <div>
                 <button
                   className={`nav-item ${activeView === 'creators' ? 'nav-active' : ''}`}
@@ -86,8 +92,8 @@ const AppSidebar = () => {
                     setIsMobileMenuOpen(false);
                   }}
                 >
-                  <Users className="nav-icon" />
-                  Creators
+                  <UserCheck className="nav-icon" />
+                  Artists
                 </button>
               </div>
             )}

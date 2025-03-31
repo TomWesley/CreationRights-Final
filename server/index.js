@@ -8,6 +8,7 @@ const path = require('path');
 const dotenv = require('dotenv');
 const multer = require('multer');
 const fs = require('fs');
+const instagramService = require('./services/instagramService');
 
 
 // Load environment variables
@@ -50,21 +51,175 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Add this to server/index.js
-const instagramService = require('./services/instagramService');
+
+// Add middleware to handle HTML responses
+app.use((req, res, next) => {
+  // Store the original send method
+  const originalSend = res.send;
+  
+  // Override the send method
+  res.send = function(body) {
+    // Check if the response is HTML and we're not explicitly requesting HTML
+    const isHTML = typeof body === 'string' && 
+                  (body.trim().startsWith('<!DOCTYPE') || 
+                   body.trim().startsWith('<html'));
+    
+    const wantsJSON = req.headers.accept && 
+                      req.headers.accept.includes('application/json');
+    
+    // If it's HTML but the client wants JSON, convert it to a JSON error
+    if (isHTML && wantsJSON) {
+      console.error('Attempted to send HTML to a JSON client. Converting to JSON error.');
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'The server encountered an unexpected condition that prevented it from fulfilling the request.'
+      });
+      return;
+    }
+    
+    // Otherwise, use the original send method
+    return originalSend.call(this, body);
+  };
+  
+  next();
+});
+
 
 // Instagram API endpoint
+// Add Instagram API endpoint
 app.get('/api/instagram/:username', async (req, res) => {
   try {
+    // Set JSON response type explicitly
+    res.setHeader('Content-Type', 'application/json');
+    
     const { username } = req.params;
-    const posts = await instagramService.fetchInstagramPosts(username);
-    res.status(200).json(posts);
+    
+    // Normalize the username (remove @ if present)
+    const normalizedUsername = username.startsWith('@') ? username.substring(1) : username;
+    
+    console.log(`Processing Instagram request for username: ${normalizedUsername}`);
+    
+    // Set a longer timeout for the request to avoid abrupt disconnections
+    req.setTimeout(120000); // 2 minute timeout
+    
+    // Attempt to fetch posts
+    let posts;
+    try {
+      posts = await instagramService.fetchInstagramPosts(normalizedUsername);
+    } catch (fetchError) {
+      console.error('Error fetching Instagram posts:', fetchError);
+      // Send a proper JSON error response, not HTML
+      return res.status(500).json({
+        error: 'Instagram API Error',
+        message: fetchError.message || 'Failed to fetch Instagram posts. Please try again later.'
+      });
+    }
+    
+    // Check that we actually got valid data
+    if (!posts || !Array.isArray(posts)) {
+      console.error('Invalid posts data returned:', posts);
+      return res.status(500).json({
+        error: 'Invalid response from Instagram service',
+        message: 'Failed to retrieve posts data. Please try again later.'
+      });
+    }
+    
+    // Send the response as JSON (this is important!)
+    return res.json(posts);
   } catch (error) {
     console.error('Error handling Instagram request:', error);
+    // Provide a more user-friendly error message
+    return res.status(500).json({ 
+      error: error.message,
+      message: 'Failed to fetch Instagram posts. The account may be private or Instagram may be limiting requests. Please try again in a few minutes.'
+    });
+  }
+});
+
+// Add Instagram post conversion endpoint
+app.post('/api/instagram/convert', async (req, res) => {
+  try {
+    const { posts, userId } = req.body;
+    
+    if (!posts || !Array.isArray(posts)) {
+      return res.status(400).json({ error: 'Posts are required and must be an array' });
+    }
+    
+    const creations = posts.map(post => instagramService.convertPostToCreation(post));
+    
+    res.status(200).json(creations);
+  } catch (error) {
+    console.error('Error converting Instagram posts:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
+// Add this to server/index.js
+
+// Endpoint to fetch users by type
+app.get('/api/users', async (req, res) => {
+  try {
+    const userType = req.query.type || '';
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // List all files in the users directory
+    const [files] = await bucket.getFiles({ prefix: 'users/' });
+    
+    // Filter for user profile files
+    const userInfoFiles = files.filter(file => file.name.endsWith('/profile/info.json'));
+    
+    // Array to store user data
+    const users = [];
+    
+    // Process each user file
+    for (const file of userInfoFiles) {
+      try {
+        // Download and parse the user data
+        const [content] = await file.download();
+        const userData = JSON.parse(content.toString());
+        
+        // If a type filter was specified, only include users of that type
+        if (!userType || userData.userType === userType) {
+          // Get username from file path (users/username/profile/info.json)
+          const pathParts = file.name.split('/');
+          const username = pathParts[1];
+          
+          // Get total works count
+          let totalWorks = 0;
+          try {
+            const creationsFile = bucket.file(`users/${username}/creations/metadata/all.json`);
+            const [exists] = await creationsFile.exists();
+            
+            if (exists) {
+              const [creationsContent] = await creationsFile.download();
+              const creationsData = JSON.parse(creationsContent.toString());
+              totalWorks = creationsData.length || 0;
+            }
+          } catch (err) {
+            console.error(`Error getting work count for user ${username}:`, err);
+          }
+          
+          // Enhance user data with additional info
+          const enhancedUserData = {
+            ...userData,
+            totalWorks,
+            // Determine content types from their creations
+            contentTypes: []
+          };
+          
+          users.push(enhancedUserData);
+        }
+      } catch (err) {
+        console.error(`Error processing user file ${file.name}:`, err);
+      }
+    }
+    
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // Configure multer for file uploads
 const multerStorage = multer.memoryStorage(); // Use memory storage instead of disk
 

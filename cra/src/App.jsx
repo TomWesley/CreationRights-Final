@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/App.jsx - Updated with Agency Views
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 import LandingPage from './components/pages/LandingPage';
@@ -7,6 +7,8 @@ import AppSidebar from './components/layout/AppSidebar';
 import CreatorDashboard from './components/pages/CreatorDashboard';
 import AgencyDashboard from './components/pages/AgencyDashboard';
 import CreationsList from './components/pages/CreationsList';
+import AllCreationsList from './components/pages/AllCreationsList';
+import ArtistsList from './components/pages/ArtistsList';
 import CreationForm from './components/pages/CreationForm';
 import CreatorManagement from './components/pages/CreatorManagement';
 import Settings from './components/pages/Settings';
@@ -45,6 +47,8 @@ const AppContent = () => {
     switch (activeView) {
       case 'dashboard':
         return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
+      
+      // Creator-specific views
       case 'myCreations':
         return <CreationsList />;
       case 'newCreation':
@@ -53,24 +57,32 @@ const AppContent = () => {
         return <MetadataEditPage />;
       case 'youtubeImport':
         return <YouTubeImport />;
-      case 'instagramImport': // Add this new case
+      case 'instagramImport':
         return <InstagramImport />;
       case 'fileUpload':
         return <FileUploadPage />;
       case 'metadataCompletion':
         return <MetadataCompletionPage />;
+        
+      // Agency-specific views
+      case 'allCreations':
+        return <AllCreationsList />;
+      case 'creators':
+        return userType === 'agency' ? <ArtistsList /> : <CreatorManagement />;
+      
+      // Common views
       case 'team':
         return <TeamPage />;
       case 'network':
         return <NetworkPage />;
-      case 'creators':
-        return userType === 'agency' ? <CreatorManagement /> : <CreatorDashboard />;
       case 'settings':
         return <Settings />;
+      
       default:
         return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
     }
   };
+  
   return (
     <div className="app-layout">
       <AppHeader />

@@ -1,18 +1,29 @@
-// src/components/shared/CreationCard.jsx
+// src/components/shared/CreationCard.jsx - Modified for Agency View
 
 import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
-import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Instagram, Info, ChevronDown, ChevronUp, Play, Pause, Globe, DollarSign, Mail } from 'lucide-react';
+import { 
+  Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, 
+  Youtube, Instagram, Info, ChevronDown, ChevronUp, Play, Pause, 
+  Globe, DollarSign, Mail, User, BookmarkPlus, MessageSquare 
+} from 'lucide-react';
 
-
-const CreationCard = ({ creation }) => {
-  const { handleEdit, handleDelete, handleUpdateCreation, currentUser } = useAppContext();
+const CreationCard = ({ creation, isAgencyView = false }) => {
+  const { 
+    handleEdit, 
+    handleDelete, 
+    handleUpdateCreation, 
+    currentUser,
+    userType
+  } = useAppContext();
+  
   const [showMetadata, setShowMetadata] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audio, setAudio] = useState(null);
   const [showContactInfo, setShowContactInfo] = useState(false);
+  const [showCreatorInfo, setShowCreatorInfo] = useState(false);
 
   // Initialize audio player if it's an audio file
   useEffect(() => {
@@ -88,6 +99,11 @@ const CreationCard = ({ creation }) => {
   // Toggle contact info visibility
   const toggleContactInfo = () => {
     setShowContactInfo(!showContactInfo);
+  };
+  
+  // Toggle creator info visibility
+  const toggleCreatorInfo = () => {
+    setShowCreatorInfo(!showCreatorInfo);
   };
   
   // Determine if this has metadata
@@ -247,7 +263,7 @@ const CreationCard = ({ creation }) => {
 
   // Render licensing information
   const renderLicensingInfo = () => {
-    if (!creation.status === 'published') return null;
+    if (creation.status !== 'published') return null;
     
     if (creation.licensingCost) {
       return (
@@ -273,8 +289,8 @@ const CreationCard = ({ creation }) => {
               <p className="font-medium mb-1">Contact information:</p>
               <div className="flex items-center text-gray-700">
                 <Mail className="h-4 w-4 mr-1" />
-                <a href={`mailto:${currentUser?.email || creation.createdBy}`} className="text-blue-600 hover:underline">
-                  {currentUser?.email || creation.createdBy}
+                <a href={`mailto:${creation.createdBy || 'creator@example.com'}`} className="text-blue-600 hover:underline">
+                  {creation.createdBy || 'creator@example.com'}
                 </a>
               </div>
             </div>
@@ -282,6 +298,38 @@ const CreationCard = ({ creation }) => {
         </div>
       );
     }
+  };
+  
+  // Render creator info for agency view
+  const renderCreatorInfo = () => {
+    if (!creation.createdBy) return null;
+    
+    return (
+      <div className="mt-3 pt-3 border-t border-gray-200">
+        {!showCreatorInfo ? (
+          <button 
+            className="text-blue-600 text-sm flex items-center hover:text-blue-800"
+            onClick={toggleCreatorInfo}
+          >
+            <User className="h-4 w-4 mr-1" />
+            View Creator Info
+          </button>
+        ) : (
+          <div className="text-sm">
+            <p className="font-medium mb-1">Created by:</p>
+            <div className="p-2 bg-blue-50 rounded-md">
+              <p>{creation.createdBy}</p>
+              {creation.metadata && creation.metadata.creator && (
+                <p className="text-gray-600 mt-1">Artist: {creation.metadata.creator}</p>
+              )}
+              {creation.metadata && creation.metadata.rightsHolders && (
+                <p className="text-gray-600">Rights Holders: {creation.metadata.rightsHolders}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
   
   return (
@@ -384,38 +432,84 @@ const CreationCard = ({ creation }) => {
           
           {/* Show licensing information for published creations */}
           {creation.status === 'published' && renderLicensingInfo()}
+          
+          {/* Show creator info for agency view */}
+          {isAgencyView && renderCreatorInfo()}
         </div>
         
         <div className="creation-actions">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => handleEdit(creation)}
-            className="edit-button"
-          >
-            <Edit className="button-icon-small" /> Edit
-          </Button>
-          
-          {/* Make Public button - only show for draft status */}
-          {creation.status !== 'published' && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleMakePublic}
-              className="publish-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
-            >
-              <Globe className="button-icon-small" /> Make Public
-            </Button>
+          {!isAgencyView ? (
+            // Creator view actions
+            <>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => handleEdit(creation)}
+                className="edit-button"
+              >
+                <Edit className="button-icon-small" /> Edit
+              </Button>
+              
+              {/* Make Public button - only show for draft status */}
+              {creation.status !== 'published' && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleMakePublic}
+                  className="publish-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+                >
+                  <Globe className="button-icon-small" /> Make Public
+                </Button>
+              )}
+              
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={() => handleDelete(creation.id)}
+                className="delete-button"
+              >
+                <Trash2 className="button-icon-small" /> Delete
+              </Button>
+            </>
+          ) : (
+            // Agency view actions
+            <>
+              {creation.licensingCost ? (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="license-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+                >
+                  <DollarSign className="button-icon-small" /> License (${creation.licensingCost})
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="contact-button"
+                  onClick={toggleContactInfo}
+                >
+                  <Mail className="button-icon-small" /> Contact Creator
+                </Button>
+              )}
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="bookmark-button"
+              >
+                <BookmarkPlus className="button-icon-small" /> Save
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="message-button"
+              >
+                <MessageSquare className="button-icon-small" /> Send Message
+              </Button>
+            </>
           )}
-          
-          <Button 
-            variant="destructive" 
-            size="sm" 
-            onClick={() => handleDelete(creation.id)}
-            className="delete-button"
-          >
-            <Trash2 className="button-icon-small" /> Delete
-          </Button>
           
           {creation.sourceUrl && (
             <Button 
@@ -450,9 +544,10 @@ const CreationCard = ({ creation }) => {
             </Button>
           )}
         </div>
-      </div>
-    </Card>
-  );
-};
+        </div>
+        </Card>
+      );
+    };
+      
 
-export default CreationCard;
+    export default CreationCard

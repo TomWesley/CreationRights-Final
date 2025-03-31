@@ -1,13 +1,14 @@
 // src/components/pages/CreationsList.jsx
 
 import React, { useState } from 'react';
-import { Plus, FolderPlus, Search, AlertCircle, Youtube, Upload, Filter, Globe, FileText } from 'lucide-react';
+import { Plus, FolderPlus, Search, AlertCircle, Youtube, Upload, Filter, Globe, FileText, Instagram} from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import CreationCard from '../shared/CreationCard';
 import { useAppContext } from '../../contexts/AppContext';
+
 
 const CreationsList = () => {
   const { 
@@ -96,31 +97,42 @@ const CreationsList = () => {
             </Button>
             
             {showImportDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-10 border">
-                <div className="py-1">
-                  <button
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                    onClick={() => {
-                      setActiveView('fileUpload');
-                      setShowImportDropdown(false);
-                    }}
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload File
-                  </button>
-                  <button
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                    onClick={() => {
-                      setActiveView('youtubeImport');
-                      setShowImportDropdown(false);
-                    }}
-                  >
-                    <Youtube className="w-4 h-4 mr-2" />
-                    Import from YouTube
-                  </button>
-                </div>
-              </div>
-            )}
+  <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-10 border">
+    <div className="py-1">
+      <button
+        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+        onClick={() => {
+          setActiveView('fileUpload');
+          setShowImportDropdown(false);
+        }}
+      >
+        <Upload className="w-4 h-4 mr-2" />
+        Upload File
+      </button>
+      <button
+        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+        onClick={() => {
+          setActiveView('youtubeImport');
+          setShowImportDropdown(false);
+        }}
+      >
+        <Youtube className="w-4 h-4 mr-2" />
+        Import from YouTube
+      </button>
+      {/* Add this new button */}
+      <button
+        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
+        onClick={() => {
+          setActiveView('instagramImport');
+          setShowImportDropdown(false);
+        }}
+      >
+        <Instagram className="w-4 h-4 mr-2" />
+        Import from Instagram
+      </button>
+    </div>
+  </div>
+)}
           </div>
           
           <Button variant="outline" onClick={() => setShowNewFolderModal(true)} className="new-folder-button">
@@ -160,28 +172,21 @@ const CreationsList = () => {
         </CardHeader>
         <CardContent>
           {filteredCreations.length === 0 ? (
-            <div className="empty-state">
-              <AlertCircle className="empty-icon" />
-              <p className="empty-title">No creations found</p>
-              <p className="empty-message">
-                {searchQuery 
-                  ? "Try adjusting your search query" 
-                  : statusFilter !== 'all'
-                    ? `No ${statusFilter} creations found`
-                    : "Add your first creation or create a new folder"}
-              </p>
-              <div className="empty-actions">
-                <Button variant="outline" onClick={() => setActiveView('fileUpload')}>
-                  <Upload className="button-icon" /> Upload File
-                </Button>
-                <Button variant="outline" onClick={() => setActiveView('youtubeImport')}>
-                  <Youtube className="button-icon" /> Import from YouTube
-                </Button>
-                <Button variant="outline" onClick={() => setShowNewFolderModal(true)}>
-                  <FolderPlus className="button-icon" /> New Folder
-                </Button>
-              </div>
-            </div>
+            <div className="empty-actions">
+            <Button variant="outline" onClick={() => setActiveView('fileUpload')}>
+              <Upload className="button-icon" /> Upload File
+            </Button>
+            <Button variant="outline" onClick={() => setActiveView('youtubeImport')}>
+              <Youtube className="button-icon" /> Import from YouTube
+            </Button>
+            {/* Add this new button */}
+            <Button variant="outline" onClick={() => setActiveView('instagramImport')}>
+              <Instagram className="button-icon" /> Import from Instagram
+            </Button>
+            <Button variant="outline" onClick={() => setShowNewFolderModal(true)}>
+              <FolderPlus className="button-icon" /> New Folder
+            </Button>
+          </div>
           ) : (
             <div className="creation-list">
               {filteredCreations.map(creation => (

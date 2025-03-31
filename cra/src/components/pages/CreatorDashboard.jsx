@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../ui/card';
 import StatCard from '../shared/StatCard';
 import { useAppContext } from '../../contexts/AppContext';
+import Footer from '../layout/Footer';
 import { FileText, ImageIcon, Music, Video, Code } from 'lucide-react';
 
 const CreatorDashboard = () => {
@@ -77,6 +78,7 @@ const CreatorDashboard = () => {
           </Button>
         </CardFooter>
       </Card>
+      
     </div>
   );
 };

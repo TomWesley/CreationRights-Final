@@ -1,10 +1,11 @@
 // src/components/shared/CreationCard.jsx
 
 import React, { useState, useEffect } from 'react';
-import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Info, ChevronDown, ChevronUp, Play, Pause, Globe, DollarSign, Mail } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
+import { Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, Youtube, Instagram, Info, ChevronDown, ChevronUp, Play, Pause, Globe, DollarSign, Mail } from 'lucide-react';
+
 
 const CreationCard = ({ creation }) => {
   const { handleEdit, handleDelete, handleUpdateCreation, currentUser } = useAppContext();
@@ -45,6 +46,11 @@ const CreationCard = ({ creation }) => {
 
   // Get icon for creation type
   const getCreationTypeIcon = (type, source) => {
+    // If it's from Instagram, use the Instagram icon
+    if (source === 'Instagram') {
+      return <Instagram className="creation-type-icon text-purple-500" />;
+    }
+    
     // If it's from YouTube, use the YouTube icon
     if (source === 'YouTube') {
       return <Youtube className="creation-type-icon text-red-500" />;

@@ -50,6 +50,21 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Add this to server/index.js
+const instagramService = require('./services/instagramService');
+
+// Instagram API endpoint
+app.get('/api/instagram/:username', async (req, res) => {
+  try {
+    const { username } = req.params;
+    const posts = await instagramService.fetchInstagramPosts(username);
+    res.status(200).json(posts);
+  } catch (error) {
+    console.error('Error handling Instagram request:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Configure multer for file uploads
 const multerStorage = multer.memoryStorage(); // Use memory storage instead of disk
 

@@ -19,6 +19,7 @@ import MetadataEditPage from './components/pages/MetadataEditPage';
 import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
 import './CreationRightsApp.css';
+import InstagramImport from './components/pages/InstagramImport';
 
 const AppContent = () => {
   const { 
@@ -52,6 +53,8 @@ const AppContent = () => {
         return <MetadataEditPage />;
       case 'youtubeImport':
         return <YouTubeImport />;
+      case 'instagramImport': // Add this new case
+        return <InstagramImport />;
       case 'fileUpload':
         return <FileUploadPage />;
       case 'metadataCompletion':

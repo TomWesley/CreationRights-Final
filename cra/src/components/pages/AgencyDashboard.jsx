@@ -3,6 +3,7 @@ import { Users } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import CreatorDashboard from './CreatorDashboard';
+
 import { useAppContext } from '../../contexts/AppContext';
 
 const AgencyDashboard = () => {
@@ -23,6 +24,7 @@ const AgencyDashboard = () => {
           </div>
         </CardContent>
       </Card>
+      
     </div>
   );
 };

@@ -40,7 +40,7 @@ const AppHeader = () => {
           
           <div className="app-brand">
             <img src="/crlogo.svg" alt="Creation Rights Logo" className="app-logo" />
-            <span className="app-name">Creation Rights</span>
+            
           </div>
         </div>
         

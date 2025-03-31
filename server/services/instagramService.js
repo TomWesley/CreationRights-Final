@@ -42,28 +42,52 @@ async function fetchInstagramPosts(username) {
     });
     
     // Check if we have data
-    if (!response.data || !Array.isArray(response.data)) {
-      console.log('No valid data returned from Apify');
-      return [];
-    }
-    
-    console.log(`Retrieved ${response.data.length} items from Apify`);
-    
-    // Map the posts to the format we need
-    const posts = response.data.map(post => ({
-      id: post.id,
-      caption: post.caption || '',
-      type: determinePostType(post),
-      thumbnailUrl: post.displayUrl || post.previewUrl,
-      imageUrl: post.displayUrl,
-      videoUrl: post.videoUrl || null,
-      publishedAt: post.timestamp ? new Date(post.timestamp * 1000).toISOString() : new Date().toISOString(),
-      url: post.url || `https://www.instagram.com/p/${post.shortCode}/`,
-      likes: post.likesCount || 0,
-      comments: post.commentsCount || 0,
-      source: 'Instagram',
-      sourceUrl: post.url || `https://www.instagram.com/p/${post.shortCode}/`
-    }));
+    if (!apifyData) {
+        setError(`No data found for ${normalizedUsername}. The account may be private or not exist.`);
+        setIsLoading(false);
+        return;
+      }
+      
+      // The profile scraper returns a different structure
+      let fetchedPosts = [];
+      if (apifyData.posts && Array.isArray(apifyData.posts)) {
+        // Direct posts array from the profile
+        fetchedPosts = apifyData.posts.map(post => ({
+          id: post.id,
+          caption: post.caption || '',
+          type: determinePostType(post),
+          thumbnailUrl: post.displayUrl || post.previewUrl,
+          imageUrl: post.displayUrl,
+          videoUrl: post.videoUrl || null,
+          publishedAt: post.timestamp ? new Date(post.timestamp * 1000).toISOString() : new Date().toISOString(),
+          url: post.url || `https://www.instagram.com/p/${post.shortCode}/`,
+          likes: post.likesCount || 0,
+          comments: post.commentsCount || 0,
+          source: 'Instagram',
+          sourceUrl: post.url || `https://www.instagram.com/p/${post.shortCode}/`
+        }));
+      } else if (Array.isArray(apifyData)) {
+        // If the response is an array of results, try to find the profile data
+        const profileData = apifyData.find(item => item.username === normalizedUsername);
+        
+        if (profileData && profileData.posts && Array.isArray(profileData.posts)) {
+          fetchedPosts = profileData.posts.map(post => ({
+            id: post.id,
+            caption: post.caption || '',
+            type: determinePostType(post),
+            thumbnailUrl: post.displayUrl || post.previewUrl,
+            imageUrl: post.displayUrl,
+            videoUrl: post.videoUrl || null,
+            publishedAt: post.timestamp ? new Date(post.timestamp * 1000).toISOString() : new Date().toISOString(),
+            url: post.url || `https://www.instagram.com/p/${post.shortCode}/`,
+            likes: post.likesCount || 0,
+            comments: post.commentsCount || 0,
+            source: 'Instagram',
+            sourceUrl: post.url || `https://www.instagram.com/p/${post.shortCode}/`
+          }));
+        }
+      }
+      
     
     console.log(`Processed ${posts.length} posts`);
     return posts;
@@ -77,15 +101,14 @@ async function fetchInstagramPosts(username) {
  * Determine the post type from Apify data
  */
 function determinePostType(post) {
-  if (post.type === 'Video' || post.videoUrl) {
-    return 'Video';
-  } else if (post.type === 'Carousel') {
-    return 'Image'; // Default carousel to Image type
-  } else {
-    return 'Image';
+    if (post.type === 'Video' || post.videoUrl) {
+      return 'Video';
+    } else if (post.type === 'Carousel') {
+      return 'Image'; // Default carousel to Image type
+    } else {
+      return 'Image';
+    }
   }
-}
-
 /**
  * Convert Instagram post to creation object format
  */

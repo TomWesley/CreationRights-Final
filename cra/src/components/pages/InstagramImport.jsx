@@ -37,23 +37,202 @@ const InstagramImport = () => {
     setPosts([]);
     
     try {
-      const response = await fetch(`/api/instagram/${username}`);
+      // Normalize the username (remove @ if present)
+      const normalizedUsername = username.startsWith('@') ? username.substring(1) : username;
       
+      console.log(`Fetching posts for Instagram user: ${normalizedUsername}`);
+      
+      // Direct call to Apify API
+      const apifyToken = 'apify_api_IwtubPMgbGcCcfYqFhxy5zNkFKPXF14njt05';
+      // Use instagram-profile-scraper instead
+      const apifyUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync?token=${apifyToken}`;
+      
+      const response = await fetch(apifyUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: normalizedUsername,
+          resultsLimit: 20,
+          addPosts: true,
+          proxy: {
+            useApifyProxy: true
+          }
+        })
+      });
+      
+      // Log response status for debugging
+      console.log(`Response status: ${response.status}`);
+      
+      // Check for non-200 responses and handle them
       if (!response.ok) {
-        throw new Error(`Failed to fetch posts: ${response.status}`);
+        // Try to parse the error message if possible
+        let errorMessage;
+        try {
+          const errorText = await response.text();
+          console.log('Error response:', errorText);
+          
+          // Check if it's HTML (starts with <!DOCTYPE or <html)
+          if (errorText.trim().startsWith('<!DOCTYPE') || errorText.trim().startsWith('<html')) {
+            errorMessage = `Server returned HTML instead of JSON (status ${response.status})`;
+          } else {
+            // Try to parse as JSON
+            try {
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.message || errorData.error || `Error: ${response.status} ${response.statusText}`;
+            } catch (parseError) {
+              errorMessage = `Server error: ${response.status} ${response.statusText}`;
+            }
+          }
+        } catch (parseError) {
+          errorMessage = `Server returned error: ${response.status} ${response.statusText}`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
-      const fetchedPosts = await response.json();
-      setPosts(fetchedPosts);
+      // Parse JSON response
+      const apifyData = await response.json();
+      console.log('Raw Apify response:', JSON.stringify(apifyData, null, 2));
       
-      // Pre-select posts that haven't been imported yet
-      const initialSelected = {};
-      fetchedPosts.forEach(post => {
-        initialSelected[post.id] = !isPostAlreadyImported(post.id);
-      });
-      setSelectedPosts(initialSelected);
+      // Check if we got data - the structure could be different from what we expect
+      if (!apifyData) {
+        setError(`No data found for ${normalizedUsername}. The account may be private or not exist.`);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Let's examine the structure of the response
+      console.log('Response type:', typeof apifyData);
+      console.log('Response keys:', Object.keys(apifyData));
+      
+      // If it's a profile object with posts
+      if (apifyData.posts && Array.isArray(apifyData.posts)) {
+        const fetchedPosts = apifyData.posts.map(post => ({
+          id: post.id || `instagram-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          caption: post.caption || '',
+          type: post.videoUrl ? 'Video' : 'Image',
+          thumbnailUrl: post.displayUrl || post.thumbnailUrl || post.imageUrl || post.previewUrl,
+          imageUrl: post.displayUrl || post.imageUrl,
+          videoUrl: post.videoUrl || null,
+          publishedAt: post.timestamp ? new Date(post.timestamp * 1000).toISOString() : new Date().toISOString(),
+          url: post.url || post.permalink || `https://www.instagram.com/p/${post.shortCode || post.code}/`,
+          likes: post.likesCount || post.likes || 0,
+          comments: post.commentsCount || post.comments || 0,
+          source: 'Instagram',
+          sourceUrl: post.url || post.permalink || `https://www.instagram.com/p/${post.shortCode || post.code}/`
+        }));
+        
+        console.log(`Processed ${fetchedPosts.length} posts`);
+        setPosts(fetchedPosts);
+        
+        // Pre-select posts that haven't been imported yet
+        const initialSelected = {};
+        fetchedPosts.forEach(post => {
+          initialSelected[post.id] = !isPostAlreadyImported(post.id);
+        });
+        setSelectedPosts(initialSelected);
+      }
+      // If it's an object with a profile key
+      else if (apifyData.data && apifyData.data.user && apifyData.data.user.edge_owner_to_timeline_media) {
+        // Handle the GraphQL API response format
+        const edges = apifyData.data.user.edge_owner_to_timeline_media.edges || [];
+        const fetchedPosts = edges.map(edge => {
+          const node = edge.node;
+          return {
+            id: node.id || `instagram-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || '',
+            type: node.is_video ? 'Video' : 'Image',
+            thumbnailUrl: node.display_url || node.thumbnail_src,
+            imageUrl: node.display_url,
+            videoUrl: node.video_url || null,
+            publishedAt: new Date(node.taken_at_timestamp * 1000).toISOString(),
+            url: `https://www.instagram.com/p/${node.shortcode}/`,
+            likes: node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0,
+            comments: node.edge_media_to_comment?.count || 0,
+            source: 'Instagram',
+            sourceUrl: `https://www.instagram.com/p/${node.shortcode}/`
+          };
+        });
+        
+        console.log(`Processed ${fetchedPosts.length} posts from GraphQL data`);
+        setPosts(fetchedPosts);
+        
+        // Pre-select posts that haven't been imported yet
+        const initialSelected = {};
+        fetchedPosts.forEach(post => {
+          initialSelected[post.id] = !isPostAlreadyImported(post.id);
+        });
+        setSelectedPosts(initialSelected);
+      }
+      // If it's an array of items
+      else if (Array.isArray(apifyData)) {
+        console.log('Response is an array with length:', apifyData.length);
+        
+        // Try to find posts directly in the array
+        let fetchedPosts = apifyData
+          .filter(item => item.id && (item.imageUrl || item.displayUrl || item.thumbnailUrl))
+          .map(post => ({
+            id: post.id || `instagram-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            caption: post.caption || '',
+            type: post.videoUrl ? 'Video' : 'Image',
+            thumbnailUrl: post.displayUrl || post.thumbnailUrl || post.imageUrl || post.previewUrl,
+            imageUrl: post.displayUrl || post.imageUrl,
+            videoUrl: post.videoUrl || null,
+            publishedAt: post.timestamp ? new Date(post.timestamp * 1000).toISOString() : new Date().toISOString(),
+            url: post.url || post.permalink || `https://www.instagram.com/p/${post.shortCode || post.code}/`,
+            likes: post.likesCount || post.likes || 0,
+            comments: post.commentsCount || post.comments || 0,
+            source: 'Instagram',
+            sourceUrl: post.url || post.permalink || `https://www.instagram.com/p/${post.shortCode || post.code}/`
+          }));
+        
+        // If we didn't find posts directly, look for a profile item with posts
+        if (fetchedPosts.length === 0) {
+          const profileItem = apifyData.find(item => 
+            item.username && item.username.toLowerCase() === normalizedUsername.toLowerCase() && item.posts
+          );
+          
+          if (profileItem && Array.isArray(profileItem.posts)) {
+            fetchedPosts = profileItem.posts.map(post => ({
+              id: post.id || `instagram-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              caption: post.caption || '',
+              type: post.videoUrl ? 'Video' : 'Image',
+              thumbnailUrl: post.displayUrl || post.thumbnailUrl || post.imageUrl || post.previewUrl,
+              imageUrl: post.displayUrl || post.imageUrl,
+              videoUrl: post.videoUrl || null,
+              publishedAt: post.timestamp ? new Date(post.timestamp * 1000).toISOString() : new Date().toISOString(),
+              url: post.url || post.permalink || `https://www.instagram.com/p/${post.shortCode || post.code}/`,
+              likes: post.likesCount || post.likes || 0,
+              comments: post.commentsCount || post.comments || 0,
+              source: 'Instagram',
+              sourceUrl: post.url || post.permalink || `https://www.instagram.com/p/${post.shortCode || post.code}/`
+            }));
+          }
+        }
+        
+        if (fetchedPosts.length > 0) {
+          console.log(`Processed ${fetchedPosts.length} posts from array data`);
+          setPosts(fetchedPosts);
+          
+          // Pre-select posts that haven't been imported yet
+          const initialSelected = {};
+          fetchedPosts.forEach(post => {
+            initialSelected[post.id] = !isPostAlreadyImported(post.id);
+          });
+          setSelectedPosts(initialSelected);
+        } else {
+          setError(`Could not find posts for ${normalizedUsername} in the API response. The account may be private or have no posts.`);
+        }
+      }
+      else {
+        // We got a response, but it doesn't have the structure we expect
+        console.log('Unexpected response structure:', apifyData);
+        setError(`Received response but could not find posts for ${normalizedUsername}. The data format is unexpected.`);
+      }
     } catch (error) {
-      console.error('Error fetching posts:', error);
+      console.error('Error fetching Instagram posts:', error);
       setError(error.message || 'Failed to fetch posts from Instagram');
     } finally {
       setIsLoading(false);

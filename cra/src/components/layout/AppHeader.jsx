@@ -1,6 +1,6 @@
 // src/components/layout/AppHeader.jsx
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { LogOut, Menu, User } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
@@ -48,26 +48,30 @@ const AppHeader = () => {
         
           <div className="user-info flex items-center cursor-pointer" onClick={() => setActiveView('profile')}>
             {currentUser?.photoUrl ? (
-              <img 
-                src={currentUser.photoUrl} 
-                alt={formatDisplayName(currentUser?.email)} 
-                className="w-8 h-8 rounded-full mr-2 object-cover border border-gray-200"
-                onError={(e) => {
-                  // Fallback to user icon if image fails to load
-                  e.target.style.display = 'none';
-                  e.target.nextElementSibling.style.display = 'flex';
-                }}
-              />
+              <div className="relative w-8 h-8 rounded-full overflow-hidden mr-2 border border-gray-200">
+                <img 
+                  src={currentUser.photoUrl} 
+                  alt={formatDisplayName(currentUser?.email)} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // If the image fails to load, show a placeholder
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                {/* Hidden fallback initially */}
+                <div 
+                  className="w-full h-full bg-gray-200 flex items-center justify-center"
+                  style={{display: 'none'}}
+                >
+                  <User className="h-4 w-4 text-gray-500" />
+                </div>
+              </div>
             ) : (
               <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2">
                 <User className="h-4 w-4 text-gray-500" />
               </div>
             )}
-            {/* Add this as fallback that's initially hidden */}
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-2" 
-                style={{display: 'none'}}>
-              <User className="h-4 w-4 text-gray-500" />
-            </div>
             <div>
               <span className="flex items-center">
                 <span className="user-name">{currentUser?.name || formatDisplayName(currentUser?.email)}</span>

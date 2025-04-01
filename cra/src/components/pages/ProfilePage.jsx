@@ -34,24 +34,24 @@ const ProfilePage = () => {
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center mb-6">
                 {currentUser?.photoUrl ? (
-                  <>
-                    <img 
-                      src={currentUser.photoUrl} 
-                      alt={currentUser.name} 
-                      className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-md mb-4"
-                      onError={(e) => {
-                        console.error('Failed to load profile image:', currentUser.photoUrl);
-                        e.target.onerror = null;
-                        e.target.style.display = 'none';
-                        // Show fallback icon
-                        e.target.nextElementSibling.style.display = 'flex';
-                      }}
-                    />
-                    <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center mb-4" style={{display: 'none'}}>
-                      <User className="h-16 w-16 text-gray-400" />
-                    </div>
-                  </>
-                ) : (
+                    <>
+                        <img 
+                        src={getProxiedImageUrl(currentUser.photoUrl, currentUser.email)} 
+                        alt={currentUser.name} 
+                        className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-md mb-4"
+                        onError={(e) => {
+                            console.error('Failed to load profile image:', currentUser.photoUrl);
+                            e.target.onerror = null;
+                            e.target.style.display = 'none';
+                            // Show fallback icon
+                            e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                        />
+                        <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center mb-4" style={{display: 'none'}}>
+                        <User className="h-16 w-16 text-gray-400" />
+                        </div>
+                    </>
+                    ) : (
                   <div className="w-32 h-32 rounded-full bg-gray-200 flex items-center justify-center mb-4">
                     <User className="h-16 w-16 text-gray-400" />
                   </div>

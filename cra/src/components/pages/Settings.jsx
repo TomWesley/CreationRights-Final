@@ -10,6 +10,7 @@ import ProfilePhotoUpload from '../shared/ProfilePhotoUpload';
 import { useAppContext } from '../../contexts/AppContext';
 import { uploadProfilePhoto } from '../../services/fileUpload';
 import { saveUserData } from '../../services/api';
+import { getProxiedImageUrl } from '../../services/fileUpload';
 
 const Settings = () => {
   const { currentUser, setCurrentUser } = useAppContext();

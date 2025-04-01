@@ -575,6 +575,42 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
   }
 });
 
+// Add this to server/index.js
+
+// Proxy endpoint for GCS images
+app.get('/api/images/:userId/:objectPath(*)', async (req, res) => {
+  try {
+    const { userId, objectPath } = req.params;
+    const gcsPath = `users/${userId}/${objectPath}`;
+    
+    console.log(`Proxying request for GCS object: ${gcsPath}`);
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const file = bucket.file(gcsPath);
+    
+    // Check if file exists
+    const [exists] = await file.exists();
+    if (!exists) {
+      return res.status(404).send('Image not found');
+    }
+    
+    // Get the file's metadata to set the correct content type
+    const [metadata] = await file.getMetadata();
+    res.setHeader('Content-Type', metadata.contentType);
+    
+    // Stream the file directly to the response
+    file.createReadStream()
+      .on('error', (err) => {
+        console.error('Error streaming file:', err);
+        res.status(500).send('Error retrieving image');
+      })
+      .pipe(res);
+      
+  } catch (error) {
+    console.error('Error fetching image from GCS:', error);
+    res.status(500).send('Error retrieving image');
+  }
+});
 // Profile photo upload endpoint
 // Modify the profile photo upload endpoint in server/index.js
 // Replace the uploadProfilePhoto endpoint in server/index.js
@@ -609,13 +645,13 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         // Create a file in the bucket
         const gcsFile = bucket.file(gcsFilePath);
         
-        // Create a write stream
+        // Create a write stream - Remove the 'public: true' option
         const stream = gcsFile.createWriteStream({
           metadata: {
             contentType: file.mimetype,
             cacheControl: 'no-cache, max-age=0'
-          },
-          public: true
+          }
+          // Remove 'public: true' option here
         });
         
         // Handle errors and completion
@@ -626,6 +662,7 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
           });
           
           stream.on('finish', () => {
+            // Still use the public URL since your bucket permissions may allow public access
             const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
             fileInfo.gcsUrl = publicUrl;
             fileInfo.url = publicUrl;
@@ -638,6 +675,10 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         
         // Wait for the stream to finish
         await streamPromise;
+        
+        // Make the file publicly accessible using bucket permissions instead of ACLs
+        // This is not necessary if your bucket is already configured for public access
+        // If you need to make individual files public, you would use IAM permissions instead
         
         // Update user data with the new profile photo URL
         try {
@@ -661,7 +702,7 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         }
       } catch (gcsError) {
         console.error('Error uploading profile photo to GCS:', gcsError);
-        return res.status(500).json({ error: 'Failed to upload to cloud storage' });
+        return res.status(500).json({ error: 'Failed to upload to cloud storage: ' + gcsError.message });
       }
     } else {
       // No GCS available

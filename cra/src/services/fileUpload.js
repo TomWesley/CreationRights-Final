@@ -226,6 +226,7 @@ const mapTypeToMetadataCategory = (fileType) => {
   }
 };
 
+
 /**
  * Uploads a profile photo for a user
  * @param {string} userId - User ID (email)
@@ -265,4 +266,32 @@ export const uploadProfilePhoto = async (userId, photoFile) => {
     console.error('Error uploading profile photo:', error);
     throw error;
   }
+};
+
+// Add this to src/services/fileUpload.js
+
+/**
+ * Convert a Google Cloud Storage URL to a proxied URL
+ * @param {string} gcsUrl - The GCS URL to convert
+ * @param {string} userId - User ID (email)
+ * @returns {string} - Proxied URL
+ */
+export const getProxiedImageUrl = (gcsUrl, userId) => {
+  if (!gcsUrl) return null;
+  if (!gcsUrl.includes('storage.googleapis.com')) return gcsUrl; // Not a GCS URL
+  
+  // Extract the path after the bucket name
+  const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const bucketName = process.env.REACT_APP_GCS_BUCKET_NAME || 'demo-app-creationrights';
+  const basePath = `https://storage.googleapis.com/${bucketName}/users/${sanitizedUserId}/`;
+  
+  // If URL doesn't match expected pattern, return unchanged
+  if (!gcsUrl.startsWith(basePath)) return gcsUrl;
+  
+  // Extract the object path (everything after the user path)
+  const objectPath = gcsUrl.substring(basePath.length);
+  
+  // Create the proxied URL
+  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+  return `${API_URL}/api/images/${sanitizedUserId}/${objectPath}`;
 };

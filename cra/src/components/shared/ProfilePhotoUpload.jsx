@@ -2,8 +2,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X } from 'lucide-react';
 import { Button } from '../ui/button';
+import { getProxiedImageUrl } from '../../services/fileUpload';
+import { useAppContext } from '../../contexts/AppContext';
 
 const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
+  const { currentUser } = useAppContext();
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
@@ -11,7 +14,10 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
   // Initialize preview when component mounts or currentPhoto changes
   useEffect(() => {
     if (currentPhoto) {
-      setPreviewUrl(currentPhoto);
+      // Use proxied URL for GCS images
+      const proxiedUrl = currentUser && currentUser.email ? 
+        getProxiedImageUrl(currentPhoto, currentUser.email) : currentPhoto;
+      setPreviewUrl(proxiedUrl);
     }
     
     // Cleanup function to avoid memory leaks
@@ -20,7 +26,7 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
         URL.revokeObjectURL(previewUrl);
       }
     };
-  }, [currentPhoto]);
+  }, [currentPhoto, currentUser]);
 
   // Handle file selection via button
   const handleFileSelect = () => {

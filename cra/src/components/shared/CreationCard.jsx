@@ -108,31 +108,38 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
   
   // Determine if this has metadata
   const hasMetadata = creation.metadata && Object.keys(creation.metadata).length > 0;
-  
+
+  const getProxiedThumbnail = (url) => {
+    if (!url || !currentUser || !currentUser.email) return url;
+    return getProxiedImageUrl(url, currentUser.email);
+  };
+
   // Generate preview based on content type
   const renderContentPreview = () => {
     // For images
     if (creation.type === 'Image' || creation.type === 'Photography') {
-      if (creation.fileUrl || creation.thumbnailUrl) {
-        return (
-          <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
-            <img 
-              src={creation.fileUrl || creation.thumbnailUrl} 
-              alt={creation.title} 
-              className="w-full h-full object-cover"
-            />
-          </div>
-        );
-      }
+    if (creation.fileUrl || creation.thumbnailUrl) {
+      const imageUrl = getProxiedThumbnail(creation.fileUrl || creation.thumbnailUrl);
+      return (
+        <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
+          <img 
+            src={imageUrl} 
+            alt={creation.title} 
+            className="w-full h-full object-cover"
+          />
+        </div>
+      );
     }
+  }
     
     // For videos
     else if (creation.type === 'Video') {
       if (creation.thumbnailUrl) {
+        const thumbnailUrl = getProxiedThumbnail(creation.thumbnailUrl);
         return (
           <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden relative">
             <img 
-              src={creation.thumbnailUrl} 
+              src={thumbnailUrl} 
               alt={creation.title} 
               className="w-full h-full object-cover"
             />

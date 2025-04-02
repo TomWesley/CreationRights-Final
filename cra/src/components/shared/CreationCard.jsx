@@ -9,7 +9,7 @@ import {
   Youtube, Instagram, Info, ChevronDown, ChevronUp, Play, Pause, 
   Globe, DollarSign, Mail, User, BookmarkPlus, MessageSquare 
 } from 'lucide-react';
-
+import { getProxiedImageUrl } from '../../services/fileUpload';
 const CreationCard = ({ creation, isAgencyView = false }) => {
   const { 
     handleEdit, 

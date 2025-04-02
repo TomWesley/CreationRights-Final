@@ -1,4 +1,4 @@
-// src/App.jsx - Updated with Agency Views
+// src/App.jsx - Updated with Social Media Page
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 import LandingPage from './components/pages/LandingPage';
@@ -20,6 +20,7 @@ import MetadataCompletionPage from './components/pages/MetadataCompletionPage';
 import MetadataEditPage from './components/pages/MetadataEditPage';
 import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
+import SocialMediaPage from './components/pages/SocialMediaPage';
 import './CreationRightsApp.css';
 import InstagramImport from './components/pages/InstagramImport';
 import ChatPage from './components/pages/ChatPage';
@@ -64,6 +65,10 @@ const AppContent = () => {
         return <FileUploadPage />;
       case 'metadataCompletion':
         return <MetadataCompletionPage />;
+        
+      // Social Media page - available for all user types
+      case 'socialMedia':
+        return <SocialMediaPage />;
         
       // Agency-specific views
       case 'allCreations':

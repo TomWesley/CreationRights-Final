@@ -87,9 +87,10 @@ app.use((req, res, next) => {
 
 // Instagram API endpoint
 // Add Instagram API endpoint
+// Instagram API endpoint using the existing Apify integration
 app.get('/api/instagram/:username', async (req, res) => {
   try {
-    // Set JSON response type explicitly
+    // Set JSON response type explicitly to avoid HTML responses
     res.setHeader('Content-Type', 'application/json');
     
     const { username } = req.params;
@@ -102,36 +103,40 @@ app.get('/api/instagram/:username', async (req, res) => {
     // Set a longer timeout for the request to avoid abrupt disconnections
     req.setTimeout(120000); // 2 minute timeout
     
-    // Attempt to fetch posts
+    // Explicitly wrap the Instagram service call in a try-catch block
     let posts;
     try {
+      // Use the existing instagramService that leverages Apify
       posts = await instagramService.fetchInstagramPosts(normalizedUsername);
+      
+      // Validate the response to ensure we have posts
+      if (!posts || !Array.isArray(posts) || posts.length === 0) {
+        return res.status(404).json({
+          error: 'No posts found',
+          message: 'No Instagram posts found for this username. The account may be private or have no posts.'
+        });
+      }
+      
+      console.log(`Successfully fetched ${posts.length} Instagram posts for ${normalizedUsername}`);
+      
+      // Return the posts as JSON
+      return res.json(posts);
     } catch (fetchError) {
       console.error('Error fetching Instagram posts:', fetchError);
-      // Send a proper JSON error response, not HTML
+      
+      // Return a proper JSON error response
       return res.status(500).json({
         error: 'Instagram API Error',
         message: fetchError.message || 'Failed to fetch Instagram posts. Please try again later.'
       });
     }
-    
-    // Check that we actually got valid data
-    if (!posts || !Array.isArray(posts)) {
-      console.error('Invalid posts data returned:', posts);
-      return res.status(500).json({
-        error: 'Invalid response from Instagram service',
-        message: 'Failed to retrieve posts data. Please try again later.'
-      });
-    }
-    
-    // Send the response as JSON (this is important!)
-    return res.json(posts);
   } catch (error) {
     console.error('Error handling Instagram request:', error);
-    // Provide a more user-friendly error message
+    
+    // Ensure we always return JSON, even for unexpected errors
     return res.status(500).json({ 
-      error: error.message,
-      message: 'Failed to fetch Instagram posts. The account may be private or Instagram may be limiting requests. Please try again in a few minutes.'
+      error: 'Unexpected Error',
+      message: error.message || 'An unexpected error occurred while processing your request. Please try again later.'
     });
   }
 });
@@ -1384,6 +1389,127 @@ app.post('/api/chats/:userId/:chatId/read', async (req, res) => {
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error marking messages as read:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add these endpoints to server/index.js (or update if they already exist)
+
+// Get Instagram profile data
+app.get('/api/users/:userId/social-profiles/instagram', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const sanitizedUserId = sanitizeEmail(userId);
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const filePath = `users/${sanitizedUserId}/profile/social/instagram.json`;
+    
+    // Check if file exists
+    const [exists] = await bucket.file(filePath).exists();
+    if (!exists) {
+      return res.status(404).json({ error: 'Instagram profile not found' });
+    }
+    
+    // Get the profile data
+    const [content] = await bucket.file(filePath).download();
+    let profileData;
+    
+    try {
+      profileData = JSON.parse(content.toString());
+    } catch (parseError) {
+      console.error('Error parsing Instagram profile data:', parseError);
+      return res.status(500).json({ error: 'Invalid profile data format' });
+    }
+    
+    res.status(200).json(profileData);
+  } catch (error) {
+    console.error('Error getting Instagram profile:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save Instagram profile data
+app.post('/api/users/:userId/social-profiles/instagram', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const profileData = req.body;
+    
+    if (!profileData || !profileData.username) {
+      return res.status(400).json({ error: 'Invalid profile data - username is required' });
+    }
+    
+    const sanitizedUserId = sanitizeEmail(userId);
+    
+    // Save to Google Cloud Storage
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // Create directory structure if it doesn't exist
+    try {
+      await bucket.file(`users/${sanitizedUserId}/profile/social/.keep`).save('');
+    } catch (dirError) {
+      console.error(`Error ensuring directory structure: ${dirError}`);
+      // Continue anyway as the file save might still work
+    }
+    
+    // Add a timestamp to the data
+    const dataToSave = {
+      ...profileData,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    // Save the profile data
+    const filePath = `users/${sanitizedUserId}/profile/social/instagram.json`;
+    await bucket.file(filePath).save(JSON.stringify(dataToSave), {
+      contentType: 'application/json',
+      metadata: {
+        cacheControl: 'private, max-age=0'
+      }
+    });
+    
+    // Update the user's main profile data to include reference to social profiles
+    try {
+      const userInfoFile = bucket.file(`users/${sanitizedUserId}/profile/info.json`);
+      const [exists] = await userInfoFile.exists();
+      
+      if (exists) {
+        const [content] = await userInfoFile.download();
+        let userData;
+        
+        try {
+          userData = JSON.parse(content.toString());
+        } catch (parseError) {
+          console.error('Error parsing user data:', parseError);
+          userData = {}; // Start with empty object if parse fails
+        }
+        
+        // Add social profiles data to user info
+        if (!userData.socialProfiles) {
+          userData.socialProfiles = {};
+        }
+        
+        // Just store a reference, not the full data
+        userData.socialProfiles.instagram = {
+          username: profileData.username,
+          lastUpdated: new Date().toISOString()
+        };
+        
+        // Save updated user info
+        await userInfoFile.save(JSON.stringify(userData), {
+          contentType: 'application/json'
+        });
+      }
+    } catch (userUpdateError) {
+      console.error('Error updating user info with Instagram profile reference:', userUpdateError);
+      // Continue as this is non-critical
+    }
+    
+    // Return success with the saved data
+    res.status(200).json({
+      success: true,
+      data: dataToSave
+    });
+  } catch (error) {
+    console.error('Error saving Instagram profile:', error);
     res.status(500).json({ error: error.message });
   }
 });

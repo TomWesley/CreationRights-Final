@@ -1,7 +1,7 @@
 // src/components/layout/AppSidebar.jsx
 
 import React, { useState, useEffect } from 'react';
-import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck } from 'lucide-react';
+import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram } from 'lucide-react';
 import FolderStructure from '../shared/FolderStructure';
 import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
@@ -97,6 +97,20 @@ const AppSidebar = () => {
               )}
             </div>
             
+            {/* Social Media Nav Item */}
+            <div>
+              <button
+                className={`nav-item ${activeView === 'socialMedia' ? 'nav-active' : ''}`}
+                onClick={() => {
+                  setActiveView('socialMedia');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <Instagram className="nav-icon" />
+                Social Media
+              </button>
+            </div>
+            
             <div>
               <button
                 className={`nav-item ${activeView === 'team' ? 'nav-active' : ''}`}
@@ -110,7 +124,7 @@ const AppSidebar = () => {
               </button>
             </div>
             
-            {/* Add the Messages button here */}
+            {/* Messages button */}
             <div>
               <button
                 className={`nav-item ${activeView === 'messages' ? 'nav-active' : ''}`}

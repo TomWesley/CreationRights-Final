@@ -42,7 +42,7 @@ async function fetchInstagramPosts(username) {
  */
 async function fetchWithProfileScraper(username) {
   // Use the instagram-profile-scraper which is more reliable
-  const apiUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync?token=${APIFY_API_TOKEN}`;
+  const apiUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/runs?token=${APIFY_API_TOKEN}`
   
   // Set up the actor input with more optimal parameters
   const payload = {
@@ -192,7 +192,7 @@ function convertPostToCreation(post) {
  */
 async function fetchWithBasicScraper(username) {
   // Use the basic instagram-scraper for fallback
-  const apiUrl = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync?token=${APIFY_API_TOKEN}`;
+  const apiUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync?token=${APIFY_API_TOKEN}`;
   
   // Set up the actor input with simpler parameters
   const payload = {

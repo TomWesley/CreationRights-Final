@@ -1,8 +1,8 @@
 // src/components/pages/ChatPage.jsx
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, User, ArrowLeft, Users, Search } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../ui/card';
+import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useAppContext } from '../../contexts/AppContext';
@@ -22,53 +22,62 @@ const ChatPage = () => {
   const messagesEndRef = useRef(null);
   const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
-  // Load chats and users when component mounts
-  useEffect(() => {
-    if (currentUser?.email) {
-      fetchChats();
-      fetchAllUsers();
+  // Function to update URL with chat ID for direct linking
+  const updateUrlWithChatId = useCallback((chatId) => {
+    if (window.history && window.history.pushState) {
+      const newUrl = new URL(window.location);
+      newUrl.searchParams.set('chatId', chatId);
+      window.history.pushState({}, '', newUrl);
     }
-  }, [currentUser]);
+  }, []);
 
-  // Filter users when search query changes
-  useEffect(() => {
-    if (userSearchQuery.trim() === '') {
-      setFilteredUsers(allUsers);
-    } else {
-      const query = userSearchQuery.toLowerCase();
-      const filtered = allUsers.filter(user => 
-        user.name.toLowerCase().includes(query) || 
-        user.email.toLowerCase().includes(query)
-      );
-      setFilteredUsers(filtered);
+  // Define markMessagesAsRead with useCallback
+  const markMessagesAsRead = useCallback(async (chatId) => {
+    try {
+      await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/read`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
     }
-  }, [userSearchQuery, allUsers]);
+  }, [API_URL, currentUser?.email]);
 
-  // Scroll to bottom of messages when new ones come in
-  useEffect(() => {
-    scrollToBottom();
-  }, [activeChat]);
-  
-  // Periodically refresh chats and active chat messages
-  useEffect(() => {
+  // Define fetchChatMessages with useCallback
+  const fetchChatMessages = useCallback(async (chatId) => {
     if (!currentUser?.email) return;
     
-    const refreshInterval = setInterval(() => {
-      fetchChats();
-      if (activeChat) {
-        fetchChatMessages(activeChat);
+    try {
+      console.log(`Fetching messages for chat ${chatId}...`);
+      const response = await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/messages`);
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch messages: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`Error response: ${errorText}`);
+        throw new Error('Failed to fetch messages');
       }
-    }, 10000); // Refresh every 10 seconds
+      
+      const data = await response.json();
+      console.log(`Fetched ${data.length} messages for chat ${chatId}`);
+      
+      // Update the chat with messages
+      setChats(prev => 
+        prev.map(chat => 
+          chat.id === chatId ? { ...chat, messages: data } : chat
+        )
+      );
+      
+      // Mark messages as read
+      markMessagesAsRead(chatId);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    }
+  }, [API_URL, currentUser?.email, markMessagesAsRead]);
+
+  // Define fetchChats with useCallback
+  const fetchChats = useCallback(async () => {
+    if (!currentUser?.email) return;
     
-    return () => clearInterval(refreshInterval);
-  }, [currentUser, activeChat]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Fetch all chats for the current user
-  const fetchChats = async () => {
     try {
       setLoading(true);
       console.log(`Fetching chats for ${currentUser.email}...`);
@@ -112,10 +121,12 @@ const ChatPage = () => {
       // Initialize with empty array if first time
       setChats([]);
     }
-  };
+  }, [API_URL, currentUser?.email, activeChat, fetchChatMessages]);
 
-  // Fetch all users from the system
-  const fetchAllUsers = async () => {
+  // Define fetchAllUsers with useCallback
+  const fetchAllUsers = useCallback(async () => {
+    if (!currentUser?.email) return;
+    
     try {
       const response = await fetch(`${API_URL}/api/users`);
       if (!response.ok) {
@@ -132,51 +143,16 @@ const ChatPage = () => {
       setAllUsers([]);
       setFilteredUsers([]);
     }
-  };
+  }, [API_URL, currentUser?.email]);
 
-  // Fetch chat messages
-  const fetchChatMessages = async (chatId) => {
-    try {
-      console.log(`Fetching messages for chat ${chatId}...`);
-      const response = await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/messages`);
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch messages: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error(`Error response: ${errorText}`);
-        throw new Error('Failed to fetch messages');
-      }
-      
-      const data = await response.json();
-      console.log(`Fetched ${data.length} messages for chat ${chatId}`);
-      
-      // Update the chat with messages
-      setChats(prev => 
-        prev.map(chat => 
-          chat.id === chatId ? { ...chat, messages: data } : chat
-        )
-      );
-      
-      // Mark messages as read
-      markMessagesAsRead(chatId);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    }
-  };
-
-  // Mark messages as read
-  const markMessagesAsRead = async (chatId) => {
-    try {
-      await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/read`, {
-        method: 'POST',
-      });
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-    }
-  };
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
 
   // Start or open chat with user
-  const startChat = async (user) => {
+  const startChat = useCallback(async (user) => {
+    if (!currentUser?.email) return;
+    
     // Check if chat already exists
     const existingChat = chats.find(chat => 
       chat.participants.some(p => p.email === user.email)
@@ -186,6 +162,7 @@ const ChatPage = () => {
       setActiveChat(existingChat.id);
       setActiveTab('chats');
       fetchChatMessages(existingChat.id);
+      updateUrlWithChatId(existingChat.id);
       return;
     }
     
@@ -212,14 +189,17 @@ const ChatPage = () => {
       setChats(prev => [...prev, newChat]);
       setActiveChat(newChat.id);
       setActiveTab('chats');
+      
+      // Update URL with chatId (for direct linking)
+      updateUrlWithChatId(newChat.id);
     } catch (error) {
       console.error('Error creating chat:', error);
     }
-  };
+  }, [API_URL, chats, currentUser?.email, currentUser?.name, fetchChatMessages, setActiveTab, updateUrlWithChatId]);
 
   // Send a message
-  const sendMessage = async () => {
-    if (!message.trim() || !activeChat) return;
+  const sendMessage = useCallback(async () => {
+    if (!message.trim() || !activeChat || !currentUser?.email) return;
     
     try {
       console.log(`Sending message to chat ${activeChat}...`);
@@ -287,18 +267,96 @@ const ChatPage = () => {
       console.error('Error sending message:', error);
       alert('Failed to send message. Please try again.');
     }
-  };
+  }, [API_URL, activeChat, currentUser?.email, fetchChatMessages, fetchChats, message, scrollToBottom]);
+
+  // Load chats and users when component mounts
+  useEffect(() => {
+    if (currentUser?.email) {
+      fetchChats();
+      fetchAllUsers();
+    }
+  }, [currentUser, fetchChats, fetchAllUsers]);
+
+  // Filter users when search query changes
+  useEffect(() => {
+    if (userSearchQuery.trim() === '') {
+      setFilteredUsers(allUsers);
+    } else {
+      const query = userSearchQuery.toLowerCase();
+      const filtered = allUsers.filter(user => 
+        user.name?.toLowerCase().includes(query) || 
+        user.email?.toLowerCase().includes(query)
+      );
+      setFilteredUsers(filtered);
+    }
+  }, [userSearchQuery, allUsers]);
+
+  // Scroll to bottom of messages when new ones come in
+  useEffect(() => {
+    scrollToBottom();
+  }, [activeChat, scrollToBottom]);
+  
+  // Periodically refresh chats and active chat messages
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    
+    const refreshInterval = setInterval(() => {
+      fetchChats();
+    }, 10000); // Refresh every 10 seconds
+    
+    return () => clearInterval(refreshInterval);
+  }, [currentUser, fetchChats]);
+
+  // Check URL for chat ID on initial load
+  useEffect(() => {
+    if (chats.length > 0) {
+      // First check URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlChatId = urlParams.get('chatId');
+      
+      // Then check sessionStorage (this is set by ArtistsList component)
+      const storedChatId = sessionStorage.getItem('activeChat');
+      
+      // Use URL parameter first, then fallback to sessionStorage
+      const chatId = urlChatId || storedChatId;
+      
+      console.log("Initializing ChatPage with potential chatId:", chatId);
+      
+      if (chatId) {
+        const chatExists = chats.some(chat => chat.id === chatId);
+        
+        if (chatExists) {
+          console.log("Found matching chat, activating:", chatId);
+          setActiveChat(chatId);
+          fetchChatMessages(chatId);
+          setActiveTab('chats');
+          
+          // Update URL if it doesn't already have the chatId
+          if (!urlChatId && window.history && window.history.pushState) {
+            window.history.pushState({ chatId }, '', `?chatId=${chatId}`);
+          }
+          
+          // Clear sessionStorage after use
+          if (storedChatId) {
+            sessionStorage.removeItem('activeChat');
+          }
+        } else {
+          console.log("Chat ID not found in available chats:", chatId);
+        }
+      }
+    }
+  }, [chats, fetchChatMessages, setActiveTab]);
 
   // Get other participant in a chat
   const getOtherParticipant = (chat) => {
     if (!chat || !chat.participants) return { name: 'Unknown' };
-    return chat.participants.find(p => p.email !== currentUser.email) || { name: 'Unknown' };
+    return chat.participants.find(p => p.email !== currentUser?.email) || { name: 'Unknown' };
   };
 
   // Get unread messages count
   const getUnreadCount = (chat) => {
     if (!chat.messages) return 0;
-    return chat.messages.filter(msg => !msg.read && msg.sender !== currentUser.email).length;
+    return chat.messages.filter(msg => !msg.read && msg.sender !== currentUser?.email).length;
   };
 
   // Render chat list
@@ -320,6 +378,12 @@ const ChatPage = () => {
           <p className="text-gray-500 mb-4">
             Start a conversation by selecting a user from the Users tab
           </p>
+          <Button 
+            onClick={() => setActiveTab('users')}
+            variant="outline"
+          >
+            Browse Users
+          </Button>
         </div>
       );
     }
@@ -337,6 +401,8 @@ const ChatPage = () => {
               onClick={() => {
                 setActiveChat(chat.id);
                 fetchChatMessages(chat.id);
+                // Update URL with chatId for direct linking
+                updateUrlWithChatId(chat.id);
               }}
             >
               <div className="flex items-center">
@@ -477,17 +543,17 @@ const ChatPage = () => {
             messages.map(msg => (
               <div 
                 key={msg.id} 
-                className={`flex ${msg.sender === currentUser.email ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${msg.sender === currentUser?.email ? 'justify-end' : 'justify-start'}`}
               >
                 <div 
                   className={`max-w-xs md:max-w-md px-3 py-2 rounded-lg ${
-                    msg.sender === currentUser.email ? 
+                    msg.sender === currentUser?.email ? 
                     'bg-blue-500 text-white' : 
                     'bg-gray-200 text-gray-800'
                   }`}
                 >
                   <p>{msg.content}</p>
-                  <div className={`text-xs mt-1 ${msg.sender === currentUser.email ? 'text-blue-100' : 'text-gray-500'}`}>
+                  <div className={`text-xs mt-1 ${msg.sender === currentUser?.email ? 'text-blue-100' : 'text-gray-500'}`}>
                     {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </div>
                 </div>
@@ -526,7 +592,10 @@ const ChatPage = () => {
         <Button 
           variant="outline" 
           size="sm" 
-          onClick={() => setActiveView('dashboard')}
+          onClick={() => {
+            console.log("Navigating back to dashboard");
+            setActiveView('dashboard');
+          }}
         >
           Back to Dashboard
         </Button>

@@ -50,13 +50,38 @@ const fetchAPI = async (endpoint, options = {}) => {
 };
 
 // User data operations
+// Update the saveUserData function in src/services/api.js
+
 export const saveUserData = async (email, userData) => {
   try {
     const sanitizedEmail = sanitizeEmail(email);
-    await fetchAPI(`/users/${sanitizedEmail}`, {
+    console.log(`Saving user data for ${sanitizedEmail}...`);
+    
+    // Use correct API URL format
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    
+    // Log the full URL for debugging
+    // The correct path should match your server's expected structure: /api/users/{userId}
+    // The server will then store this at users/{userId}/profile/info.json internally
+    const url = `${API_URL}/api/users/${sanitizedEmail}`;
+    console.log(`POST request to: ${url}`);
+    
+    const response = await fetch(url, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify(userData)
     });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error response (${response.status}):`, errorText);
+      throw new Error(`Failed to save user data: ${response.status} ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    console.log('Save user data response:', result);
     return true;
   } catch (error) {
     console.error('Error saving user data:', error);
@@ -64,22 +89,30 @@ export const saveUserData = async (email, userData) => {
   }
 };
 
+// Similarly, update the loadUserData function:
 export const loadUserData = async (email) => {
   try {
     const sanitizedEmail = sanitizeEmail(email);
     console.log(`Loading user data for ${sanitizedEmail}`);
     
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-    const response = await fetch(`${API_URL}/users/${sanitizedEmail}`);
+    // Use correct API URL format
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    const url = `${API_URL}/api/users/${sanitizedEmail}`;
+    console.log(`GET request to: ${url}`);
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
+      console.error(`Error response (${response.status}):`, await response.text().catch(() => 'No response text'));
       if (response.status === 404) {
         return null; // User data not found
       }
-      throw new Error(`Failed to load user data: ${response.status}`);
+      throw new Error(`Failed to load user data: ${response.status} ${response.statusText}`);
     }
     
-    return await response.json();
+    const userData = await response.json();
+    console.log('User data loaded:', userData);
+    return userData;
   } catch (error) {
     console.error('Error loading user data:', error);
     return null;
@@ -451,4 +484,47 @@ export const uploadProfilePhoto = async (userId, file) => {
     console.error('Error uploading profile photo:', error);
     throw error;
   }
+};
+
+/**
+ * Get the profile photo URL for a user
+ * @param {string} email - User email
+ * @returns {Promise<string|null>} - URL to the profile photo or null if not found
+ */
+export const getProfilePhotoUrl = async (email) => {
+  try {
+    const sanitizedEmail = sanitizeEmail(email);
+    console.log(`Getting profile photo URL for ${sanitizedEmail}`);
+    
+    // Use correct API URL format
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    const url = `${API_URL}/api/users/${sanitizedEmail}/profile-photo-url`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log('No profile photo found');
+        return null;
+      }
+      throw new Error(`Failed to get profile photo URL: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.photoUrl;
+  } catch (error) {
+    console.error('Error getting profile photo URL:', error);
+    return null;
+  }
+};
+
+/**
+ * Get the direct profile photo URL (for use in img src attributes)
+ * @param {string} email - User email
+ * @returns {string} - URL to the profile photo
+ */
+export const getDirectProfilePhotoUrl = (email) => {
+  const sanitizedEmail = sanitizeEmail(email);
+  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+  return `${API_URL}/api/users/${sanitizedEmail}/profile-photo?t=${Date.now()}`;
 };

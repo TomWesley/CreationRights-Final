@@ -274,16 +274,24 @@ app.listen(PORT, () => {
 });
 
 // User data endpoints
+// Update this in server/index.js
 app.post('/api/users/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     const userData = req.body;
     
     console.log(`Saving user data for user ${userId}...`);
+    console.log('Path params:', req.params);
+    console.log('Request body:', JSON.stringify(userData).substring(0, 200) + '...');
     
     await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`users/${userId}/profile/info.json`);
+      
+      // The correct path to the info.json file for this user
+      const filePath = `users/${userId}/profile/info.json`;
+      console.log(`Saving to path: ${filePath}`);
+      
+      const file = bucket.file(filePath);
       
       await file.save(JSON.stringify(userData), {
         contentType: 'application/json',
@@ -291,6 +299,8 @@ app.post('/api/users/:userId', async (req, res) => {
           cacheControl: 'private, max-age=0'
         }
       });
+      
+      console.log(`Successfully saved user data to ${filePath}`);
     });
     
     res.status(200).json({ success: true });
@@ -304,14 +314,26 @@ app.get('/api/users/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
     
+    console.log(`Loading user data for ${userId}...`);
+    console.log('Path params:', req.params);
+    
     const userData = await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`users/${userId}/profile/info.json`);
+      
+      // The correct path to the info.json file for this user
+      const filePath = `users/${userId}/profile/info.json`;
+      console.log(`Loading from path: ${filePath}`);
+      
+      const file = bucket.file(filePath);
       
       const [exists] = await file.exists();
-      if (!exists) return null;
+      if (!exists) {
+        console.log(`File does not exist: ${filePath}`);
+        return null;
+      }
       
       const [content] = await file.download();
+      console.log(`Successfully loaded user data from ${filePath}`);
       return JSON.parse(content.toString());
     });
     
@@ -612,109 +634,204 @@ app.get('/api/images/:userId/:objectPath(*)', async (req, res) => {
   }
 });
 // Profile photo upload endpoint
-// Modify the profile photo upload endpoint in server/index.js
-// Replace the uploadProfilePhoto endpoint in server/index.js
-app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, res) => {
+// Get user profile photo
+app.get('/api/users/:userId/profile-photo', async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
+    const { userId } = req.params;
+    console.log(`Getting profile photo for user ${userId}...`);
     
-    const userId = req.params.userId;
-    const file = req.file;
+    const bucket = storage.bucket(BUCKET_NAME);
     
-    // Only allow image files for profile photos
-    if (!file.mimetype.startsWith('image/')) {
-      return res.status(400).json({ error: 'Only image files are allowed for profile photos' });
-    }
+    // Check for profile photo with various extensions
+    const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    let photoPath = null;
+    let photoFile = null;
     
-    // Create file info object
-    const fileInfo = {
-      originalName: file.originalname,
-      filename: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size
-    };
-    
-    // Upload to Google Cloud Storage
-    if (storage) {
-      try {
-        const bucket = storage.bucket(BUCKET_NAME);
-        const gcsFilePath = `users/${userId}/profile/photo${path.extname(file.originalname)}`;
-        
-        // Create a file in the bucket
-        const gcsFile = bucket.file(gcsFilePath);
-        
-        // Create a write stream - Remove the 'public: true' option
-        const stream = gcsFile.createWriteStream({
-          metadata: {
-            contentType: file.mimetype,
-            cacheControl: 'no-cache, max-age=0'
-          }
-          // Remove 'public: true' option here
-        });
-        
-        // Handle errors and completion
-        const streamPromise = new Promise((resolve, reject) => {
-          stream.on('error', (err) => {
-            console.error('Error uploading profile photo to GCS:', err);
-            reject(err);
-          });
-          
-          stream.on('finish', () => {
-            // Still use the public URL since your bucket permissions may allow public access
-            const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
-            fileInfo.gcsUrl = publicUrl;
-            fileInfo.url = publicUrl;
-            resolve();
-          });
-        });
-        
-        // Write the buffer to the stream
-        stream.end(file.buffer);
-        
-        // Wait for the stream to finish
-        await streamPromise;
-        
-        // Make the file publicly accessible using bucket permissions instead of ACLs
-        // This is not necessary if your bucket is already configured for public access
-        // If you need to make individual files public, you would use IAM permissions instead
-        
-        // Update user data with the new profile photo URL
-        try {
-          const userInfoFile = bucket.file(`users/${userId}/profile/info.json`);
-          const [exists] = await userInfoFile.exists();
-          
-          if (exists) {
-            const [content] = await userInfoFile.download();
-            const userData = JSON.parse(content.toString());
-            
-            // Update the photo URL
-            userData.photoUrl = fileInfo.gcsUrl;
-            
-            // Save the updated user data
-            await userInfoFile.save(JSON.stringify(userData), {
-              contentType: 'application/json'
-            });
-          }
-        } catch (error) {
-          console.error('Error updating user data with profile photo:', error);
-        }
-      } catch (gcsError) {
-        console.error('Error uploading profile photo to GCS:', gcsError);
-        return res.status(500).json({ error: 'Failed to upload to cloud storage: ' + gcsError.message });
+    for (const ext of extensions) {
+      const path = `users/${userId}/profile/photo.${ext}`;
+      const file = bucket.file(path);
+      const [exists] = await file.exists();
+      
+      if (exists) {
+        photoPath = path;
+        photoFile = file;
+        break;
       }
-    } else {
-      // No GCS available
-      return res.status(500).json({ error: 'Cloud storage not available' });
+    }
+    
+    if (!photoPath) {
+      console.log(`No profile photo found for user ${userId}`);
+      return res.status(404).json({ 
+        error: 'Profile photo not found',
+        message: 'No profile photo has been uploaded for this user'
+      });
+    }
+    
+    // Get the file's metadata to set the correct content type
+    const [metadata] = await photoFile.getMetadata();
+    res.setHeader('Content-Type', metadata.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    
+    // Stream the file directly to the response
+    photoFile.createReadStream()
+      .on('error', (err) => {
+        console.error('Error streaming profile photo:', err);
+        res.status(500).send('Error retrieving profile photo');
+      })
+      .pipe(res);
+      
+  } catch (error) {
+    console.error('Error fetching profile photo from GCS:', error);
+    res.status(500).json({ 
+      error: 'Error retrieving profile photo',
+      message: error.message
+    });
+  }
+});
+
+// Add a simpler endpoint to get user profile photo URL
+app.get('/api/users/:userId/profile-photo-url', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // Check for profile photo with various extensions
+    const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    let photoPath = null;
+    
+    for (const ext of extensions) {
+      const path = `users/${userId}/profile/photo.${ext}`;
+      const file = bucket.file(path);
+      const [exists] = await file.exists();
+      
+      if (exists) {
+        photoPath = path;
+        break;
+      }
+    }
+    
+    if (!photoPath) {
+      console.log(`No profile photo found for user ${userId}`);
+      return res.status(404).json({ 
+        error: 'Profile photo not found'
+      });
+    }
+    
+    // Return the public URL
+    const photoUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${photoPath}`;
+    
+    res.status(200).json({ 
+      photoUrl: photoUrl,
+      path: photoPath
+    });
+      
+  } catch (error) {
+    console.error('Error getting profile photo URL:', error);
+    res.status(500).json({ 
+      error: 'Error retrieving profile photo URL',
+      message: error.message
+    });
+  }
+});
+
+app.get('/api/debug/bucket/:path(*)', async (req, res) => {
+  try {
+    // Check if admin authorization is provided
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    // Use a simple token validation for debugging
+    // In production, use a proper authentication system
+    if (token !== process.env.DEBUG_TOKEN) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    if (!storage) {
+      return res.status(500).json({ error: 'Storage not initialized' });
+    }
+    
+    const path = req.params.path || '';
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // List files in the specified path
+    console.log(`Listing files in bucket path: ${path}`);
+    const [files] = await bucket.getFiles({ prefix: path });
+    
+    const fileList = files.map(file => ({
+      name: file.name,
+      size: file.metadata.size,
+      updated: file.metadata.updated,
+      contentType: file.metadata.contentType
+    }));
+    
+    res.status(200).json({
+      bucket: BUCKET_NAME,
+      path: path,
+      files: fileList
+    });
+  } catch (error) {
+    console.error('Error checking bucket contents:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DEBUG: Endpoint to check file contents - REMOVE IN PRODUCTION
+app.get('/api/debug/file/:path(*)', async (req, res) => {
+  try {
+    // Check if admin authorization is provided
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    // Use a simple token validation for debugging
+    if (token !== process.env.DEBUG_TOKEN) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    if (!storage) {
+      return res.status(500).json({ error: 'Storage not initialized' });
+    }
+    
+    const path = req.params.path || '';
+    const bucket = storage.bucket(BUCKET_NAME);
+    const file = bucket.file(path);
+    
+    // Check if file exists
+    const [exists] = await file.exists();
+    if (!exists) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Download file contents
+    const [content] = await file.download();
+    
+    // Get file metadata
+    const [metadata] = await file.getMetadata();
+    
+    // Try to parse JSON if content type is JSON
+    let parsedContent = null;
+    if (metadata.contentType === 'application/json') {
+      try {
+        parsedContent = JSON.parse(content.toString());
+      } catch (parseError) {
+        console.error('Error parsing JSON file:', parseError);
+      }
     }
     
     res.status(200).json({
-      success: true,
-      file: fileInfo
+      bucket: BUCKET_NAME,
+      path: path,
+      metadata: metadata,
+      content: parsedContent || content.toString()
     });
   } catch (error) {
-    console.error('Profile photo upload error:', error);
+    console.error('Error checking file contents:', error);
     res.status(500).json({ error: error.message });
   }
 });

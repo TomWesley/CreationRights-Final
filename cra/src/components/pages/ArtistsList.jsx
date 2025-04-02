@@ -7,6 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../ui/card
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useAppContext } from '../../contexts/AppContext';
+import ProfilePhoto from '../shared/ProfilePhoto';
+
 
 const ArtistsList = () => {
   const { isLoading, setIsLoading } = useAppContext();
@@ -306,48 +308,30 @@ const ArtistsList = () => {
               </CardHeader>
               
               <CardContent className="pb-2">
-                <div className="flex gap-4 mb-3">
-                    <div className="w-20 h-20 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
-                        {artist.photoUrl ? (
-                            <img 
-                            src={artist.photoUrl} 
-                            alt={artist.name} 
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.style.display = 'none';
-                                // Show the placeholder
-                                e.target.parentNode.querySelector('.fallback-icon').style.display = 'flex';
-                            }}
-                            />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center fallback-icon">
-                            <User className="h-10 w-10 text-gray-400" />
-                            </div>
-                        )}
-                        {/* Add this hidden fallback */}
-                        <div className="w-full h-full flex items-center justify-center fallback-icon" style={{display: 'none'}}>
-                            <User className="h-10 w-10 text-gray-400" />
-                        </div>
-                    </div>
-                  
-                  <div className="flex-grow">
-                    <p className="text-sm text-gray-700">{artist.bio.substring(0, 120)}{artist.bio.length > 120 ? '...' : ''}</p>
+              <div className="flex gap-4 mb-3">
+                <ProfilePhoto 
+                    email={artist.email}
+                    name={artist.name}
+                    size="lg"
+                />
+                
+                <div className="flex-grow">
+                    <p className="text-sm text-gray-700">{artist.bio?.substring(0, 120)}{artist.bio?.length > 120 ? '...' : ''}</p>
                     
                     <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                      {artist.location && (
+                    {artist.location && (
                         <span className="flex items-center">
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {artist.location}
+                        <MapPin className="h-3 w-3 mr-1" />
+                        {artist.location}
                         </span>
-                      )}
-                      
-                      <span className="flex items-center">
+                    )}
+                    
+                    <span className="flex items-center">
                         <Calendar className="h-3 w-3 mr-1" />
                         Joined {new Date(artist.joinedDate).toLocaleDateString()}
-                      </span>
+                    </span>
                     </div>
-                  </div>
+                </div>
                 </div>
                 
                 {/* Content Types & Specialties */}

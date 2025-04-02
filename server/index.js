@@ -635,6 +635,113 @@ app.get('/api/images/:userId/:objectPath(*)', async (req, res) => {
 });
 // Profile photo upload endpoint
 // Get user profile photo
+// Update this endpoint in server/index.js
+
+// Profile photo upload endpoint
+app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const userId = req.params.userId;
+    const file = req.file;
+    
+    // Only allow image files for profile photos
+    if (!file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: 'Only image files are allowed for profile photos' });
+    }
+    
+    // Create file info object
+    const fileInfo = {
+      originalName: file.originalname,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    };
+    
+    // Upload to Google Cloud Storage
+    if (storage) {
+      try {
+        const bucket = storage.bucket(BUCKET_NAME);
+        
+        // Use the correct file path for profile photos that matches where you're looking for them
+        const gcsFilePath = `users/${userId}/profile/photo${path.extname(file.originalname)}`;
+        console.log(`Uploading profile photo to: ${gcsFilePath}`);
+        
+        // Create a file in the bucket
+        const gcsFile = bucket.file(gcsFilePath);
+        
+        // Create a write stream
+        const stream = gcsFile.createWriteStream({
+          metadata: {
+            contentType: file.mimetype,
+            cacheControl: 'no-cache, max-age=0'
+          }
+        });
+        
+        // Handle errors and completion
+        const streamPromise = new Promise((resolve, reject) => {
+          stream.on('error', (err) => {
+            console.error('Error uploading profile photo to GCS:', err);
+            reject(err);
+          });
+          
+          stream.on('finish', () => {
+            // Generate public URL
+            const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+            fileInfo.gcsUrl = publicUrl;
+            fileInfo.url = publicUrl;
+            resolve();
+          });
+        });
+        
+        // Write the buffer to the stream
+        stream.end(file.buffer);
+        
+        // Wait for the stream to finish
+        await streamPromise;
+        
+        // Update user data with the new profile photo URL
+        try {
+          const userInfoFile = bucket.file(`users/${userId}/profile/info.json`);
+          const [exists] = await userInfoFile.exists();
+          
+          if (exists) {
+            const [content] = await userInfoFile.download();
+            const userData = JSON.parse(content.toString());
+            
+            // Update the photo URL
+            userData.photoUrl = fileInfo.gcsUrl;
+            
+            // Save the updated user data
+            await userInfoFile.save(JSON.stringify(userData), {
+              contentType: 'application/json'
+            });
+          }
+        } catch (error) {
+          console.error('Error updating user data with profile photo:', error);
+        }
+      } catch (gcsError) {
+        console.error('Error uploading profile photo to GCS:', gcsError);
+        return res.status(500).json({ error: 'Failed to upload to cloud storage: ' + gcsError.message });
+      }
+    } else {
+      // No GCS available
+      return res.status(500).json({ error: 'Cloud storage not available' });
+    }
+    
+    res.status(200).json({
+      success: true,
+      file: fileInfo
+    });
+  } catch (error) {
+    console.error('Profile photo upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user profile photo - this is the missing endpoint
 app.get('/api/users/:userId/profile-photo', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -648,13 +755,17 @@ app.get('/api/users/:userId/profile-photo', async (req, res) => {
     let photoFile = null;
     
     for (const ext of extensions) {
+      // This path should match where the profile photo is uploaded to
       const path = `users/${userId}/profile/photo.${ext}`;
+      console.log(`Checking for profile photo at: ${path}`);
+      
       const file = bucket.file(path);
       const [exists] = await file.exists();
       
       if (exists) {
         photoPath = path;
         photoFile = file;
+        console.log(`Found profile photo at: ${path}`);
         break;
       }
     }

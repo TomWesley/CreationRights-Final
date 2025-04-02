@@ -48,6 +48,20 @@ const ChatPage = () => {
   useEffect(() => {
     scrollToBottom();
   }, [activeChat]);
+  
+  // Periodically refresh chats and active chat messages
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    
+    const refreshInterval = setInterval(() => {
+      fetchChats();
+      if (activeChat) {
+        fetchChatMessages(activeChat);
+      }
+    }, 10000); // Refresh every 10 seconds
+    
+    return () => clearInterval(refreshInterval);
+  }, [currentUser, activeChat]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,13 +71,41 @@ const ChatPage = () => {
   const fetchChats = async () => {
     try {
       setLoading(true);
+      console.log(`Fetching chats for ${currentUser.email}...`);
+      
       const response = await fetch(`${API_URL}/api/chats/${currentUser.email}`);
+      
       if (!response.ok) {
+        console.error(`Failed to fetch chats: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`Error response: ${errorText}`);
         throw new Error('Failed to fetch chats');
       }
+      
       const data = await response.json();
+      console.log(`Fetched ${data.length} chats`);
+      
+      // Log each chat for debugging
+      data.forEach((chat, index) => {
+        console.log(`Chat ${index+1}:`, {
+          id: chat.id,
+          participants: chat.participants,
+          messageCount: chat.messages ? chat.messages.length : 0
+        });
+      });
+      
       setChats(data);
       setLoading(false);
+      
+      // If we have an active chat, fetch its messages
+      if (activeChat) {
+        const chatExists = data.some(chat => chat.id === activeChat);
+        if (chatExists) {
+          fetchChatMessages(activeChat);
+        } else {
+          setActiveChat(null);
+        }
+      }
     } catch (error) {
       console.error('Error fetching chats:', error);
       setLoading(false);
@@ -95,11 +137,18 @@ const ChatPage = () => {
   // Fetch chat messages
   const fetchChatMessages = async (chatId) => {
     try {
+      console.log(`Fetching messages for chat ${chatId}...`);
       const response = await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/messages`);
+      
       if (!response.ok) {
+        console.error(`Failed to fetch messages: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`Error response: ${errorText}`);
         throw new Error('Failed to fetch messages');
       }
+      
       const data = await response.json();
+      console.log(`Fetched ${data.length} messages for chat ${chatId}`);
       
       // Update the chat with messages
       setChats(prev => 
@@ -173,28 +222,16 @@ const ChatPage = () => {
     if (!message.trim() || !activeChat) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/chats/${activeChat}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          sender: currentUser.email,
-          content: message,
-          timestamp: new Date().toISOString()
-        })
-      });
+      console.log(`Sending message to chat ${activeChat}...`);
+      const messageText = message.trim();
+      const timestamp = new Date().toISOString();
       
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
-      
-      // Update local state with new message
-      const newMessage = {
+      // Update local state immediately for responsive UX
+      const tempMessage = {
         id: `temp-${Date.now()}`,
         sender: currentUser.email,
-        content: message,
-        timestamp: new Date().toISOString(),
+        content: messageText,
+        timestamp: timestamp,
         read: true
       };
       
@@ -203,22 +240,52 @@ const ChatPage = () => {
           chat.id === activeChat 
             ? { 
                 ...chat, 
-                messages: [...(chat.messages || []), newMessage],
-                lastMessage: message,
-                lastMessageTime: new Date().toISOString()
+                messages: [...(chat.messages || []), tempMessage],
+                lastMessage: messageText,
+                lastMessageTime: timestamp
               } 
             : chat
         )
       );
       
+      // Clear message input
       setMessage('');
       
-      // Fetch the latest messages to update the UI
+      // Scroll to bottom immediately
+      setTimeout(scrollToBottom, 50);
+      
+      // Send to server
+      const response = await fetch(`${API_URL}/api/chats/${activeChat}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: currentUser.email,
+          content: messageText,
+          timestamp: timestamp
+        })
+      });
+      
+      if (!response.ok) {
+        console.error(`Failed to send message: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`Error response: ${errorText}`);
+        throw new Error('Failed to send message');
+      }
+      
+      const sentMessage = await response.json();
+      console.log(`Message sent successfully with ID: ${sentMessage.id}`);
+      
+      // Fetch the latest messages to update the UI with the actual message from server
       setTimeout(() => {
         fetchChatMessages(activeChat);
-      }, 300);
+        // Also refresh chats list to update last message
+        fetchChats();
+      }, 500);
     } catch (error) {
       console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again.');
     }
   };
 

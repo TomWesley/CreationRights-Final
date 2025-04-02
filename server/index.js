@@ -157,10 +157,8 @@ app.post('/api/instagram/convert', async (req, res) => {
 // Add this to server/index.js
 
 // Endpoint to fetch users by type
-// Add this endpoint to your server/index.js file
-
-// Get all users
 app.get('/api/users', async (req, res) => {
+  console.log("here")
   try {
     const bucket = storage.bucket(BUCKET_NAME);
     
@@ -169,7 +167,7 @@ app.get('/api/users', async (req, res) => {
     
     // Filter for user profile files
     const userInfoFiles = files.filter(file => file.name.endsWith('/profile/info.json'));
-    
+    console.log(userInfoFiles)
     // Array to store user data
     const users = [];
     
@@ -184,14 +182,11 @@ app.get('/api/users', async (req, res) => {
         const pathParts = file.name.split('/');
         const username = pathParts[1];
         
-        // Add the user data to the array with only necessary fields (avoid sensitive data)
+        // Add the user data to the array
         users.push({
-          email: userData.email || username,
-          name: userData.name || username.split('@')[0],
-          photoUrl: userData.photoUrl,
-          location: userData.location,
-          specialties: userData.specialties || [],
-          contentTypes: userData.contentTypes || []
+          ...userData,
+          id: username, // Use the username as ID
+          status: 'active' // Default status
         });
       } catch (err) {
         console.error(`Error processing user file ${file.name}:`, err);
@@ -1026,9 +1021,12 @@ app.get('/api/chats/:userId', async (req, res) => {
     const chatsDirPath = `users/${sanitizedUserId}/chats`;
     
     // Check if chats directory exists
-    const [chatsExists] = await bucket.file(`${chatsDirPath}/`).exists();
+    const [filesExists] = await bucket.getFiles({ 
+      prefix: chatsDirPath,
+      maxResults: 1
+    });
     
-    if (!chatsExists) {
+    if (!filesExists || filesExists.length === 0) {
       // No chats directory yet, return empty array
       return res.status(200).json([]);
     }
@@ -1043,10 +1041,53 @@ app.get('/api/chats/:userId', async (req, res) => {
     for (const file of chatInfoFiles) {
       try {
         const [content] = await file.download();
-        const chatData = JSON.parse(content.toString());
+        let chatData;
+        
+        try {
+          chatData = JSON.parse(content.toString());
+        } catch (parseError) {
+          console.error(`Error parsing chat info for ${file.name}:`, parseError);
+          continue; // Skip this chat if we can't parse it
+        }
         
         // Only include chats where the user is a participant
-        if (chatData.participants.some(p => p.email === userId)) {
+        if (chatData.participants && chatData.participants.some(p => 
+          p.email === userId || p.email.toLowerCase() === userId.toLowerCase()
+        )) {
+          // Get messages to count unread
+          const messagesPath = file.name.replace('info.json', 'messages.json');
+          let messages = [];
+          
+          try {
+            const [messagesContent] = await bucket.file(messagesPath).download();
+            messages = JSON.parse(messagesContent.toString());
+            
+            // Ensure messages is always an array
+            if (!Array.isArray(messages)) {
+              console.warn(`Messages for chat ${chatData.id} is not an array`);
+              messages = [];
+            }
+            
+            // Include messages in chat data for convenience
+            chatData.messages = messages;
+            
+            // Update lastMessage and lastMessageTime if not set but messages exist
+            if (messages.length > 0 && (!chatData.lastMessage || !chatData.lastMessageTime)) {
+              const lastMsg = messages[messages.length - 1];
+              chatData.lastMessage = lastMsg.content;
+              chatData.lastMessageTime = lastMsg.timestamp;
+              
+              // Update the info.json file with this info
+              await bucket.file(file.name).save(
+                JSON.stringify(chatData),
+                { contentType: 'application/json' }
+              );
+            }
+          } catch (msgError) {
+            console.error(`Error loading messages for chat ${chatData.id}:`, msgError);
+            chatData.messages = [];
+          }
+          
           chats.push(chatData);
         }
       } catch (err) {
@@ -1069,6 +1110,7 @@ app.get('/api/chats/:userId', async (req, res) => {
 });
 
 // Create a new chat
+// Create a new chat
 app.post('/api/chats', async (req, res) => {
   try {
     const { participants } = req.body;
@@ -1082,10 +1124,11 @@ app.post('/api/chats', async (req, res) => {
       id: chatId,
       participants,
       created: new Date().toISOString(),
-      messages: [],
       lastMessage: '',
       lastMessageTime: null
     };
+    
+    console.log(`Creating new chat ${chatId} with participants:`, participants);
     
     const bucket = storage.bucket(BUCKET_NAME);
     
@@ -1093,18 +1136,48 @@ app.post('/api/chats', async (req, res) => {
     for (const participant of participants) {
       const sanitizedUserId = sanitizeEmail(participant.email);
       const chatPath = `users/${sanitizedUserId}/chats/${chatId}`;
+      const chatInfoPath = `${chatPath}/info.json`;
+      const messagesPath = `${chatPath}/messages.json`;
+      
+      console.log(`Saving chat info to ${chatInfoPath}`);
+      
+      // Check if directory exists, if not create it
+      try {
+        // Check if parent directory exists
+        const dirExists = await bucket.file(`users/${sanitizedUserId}/chats/`).exists();
+        if (!dirExists[0]) {
+          // Create an empty file to ensure directory exists
+          await bucket.file(`users/${sanitizedUserId}/chats/.keep`).save('');
+          console.log(`Created chat directory for user ${sanitizedUserId}`);
+        }
+      } catch (dirError) {
+        console.error(`Error checking/creating directory for ${sanitizedUserId}:`, dirError);
+        // Continue anyway, the file operation might still succeed
+      }
       
       // Create info.json file
-      await bucket.file(`${chatPath}/info.json`).save(
-        JSON.stringify(chatData),
-        { contentType: 'application/json' }
-      );
+      try {
+        await bucket.file(chatInfoPath).save(
+          JSON.stringify(chatData),
+          { contentType: 'application/json' }
+        );
+        console.log(`Saved chat info to ${chatInfoPath}`);
+      } catch (infoError) {
+        console.error(`Error saving chat info for ${sanitizedUserId}:`, infoError);
+        throw infoError;
+      }
       
       // Create empty messages.json file
-      await bucket.file(`${chatPath}/messages.json`).save(
-        JSON.stringify([]),
-        { contentType: 'application/json' }
-      );
+      try {
+        await bucket.file(messagesPath).save(
+          JSON.stringify([]),
+          { contentType: 'application/json' }
+        );
+        console.log(`Saved empty messages to ${messagesPath}`);
+      } catch (msgError) {
+        console.error(`Error saving empty messages for ${sanitizedUserId}:`, msgError);
+        throw msgError;
+      }
     }
     
     res.status(201).json(chatData);
@@ -1132,7 +1205,27 @@ app.get('/api/chats/:userId/:chatId/messages', async (req, res) => {
     
     // Get messages
     const [content] = await bucket.file(messagesPath).download();
-    const messages = JSON.parse(content.toString());
+    
+    // Parse the messages and ensure it's an array
+    let messages;
+    try {
+      messages = JSON.parse(content.toString());
+      // Ensure messages is always an array
+      if (!Array.isArray(messages)) {
+        console.warn(`Messages for chat ${chatId} is not an array:`, messages);
+        messages = [];
+      }
+    } catch (parseError) {
+      console.error(`Error parsing messages for chat ${chatId}:`, parseError);
+      messages = [];
+    }
+    
+    // Sort messages by timestamp
+    messages.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return timeA - timeB;
+    });
     
     res.status(200).json(messages);
   } catch (error) {
@@ -1175,10 +1268,19 @@ app.post('/api/chats/:chatId/messages', async (req, res) => {
     
     // Get chat info
     const [chatInfoContent] = await bucket.file(chatInfoPath).download();
-    const chatInfo = JSON.parse(chatInfoContent.toString());
+    let chatInfo;
+    
+    try {
+      chatInfo = JSON.parse(chatInfoContent.toString());
+    } catch (parseError) {
+      console.error(`Error parsing chat info for ${chatId}:`, parseError);
+      return res.status(500).json({ error: 'Invalid chat data' });
+    }
     
     // Validate sender is a participant
-    if (!chatInfo.participants.some(p => p.email === sender)) {
+    if (!chatInfo.participants || !chatInfo.participants.some(p => 
+      p.email === sender || p.email.toLowerCase() === sender.toLowerCase()
+    )) {
       return res.status(403).json({ error: 'Sender is not a participant in this chat' });
     }
     
@@ -1195,8 +1297,24 @@ app.post('/api/chats/:chatId/messages', async (req, res) => {
       // Get current messages
       let currentMessages = [];
       try {
-        const [messagesContent] = await bucket.file(participantMessagesPath).download();
-        currentMessages = JSON.parse(messagesContent.toString());
+        // Check if file exists first
+        const [messagesExists] = await bucket.file(participantMessagesPath).exists();
+        
+        if (messagesExists) {
+          const [messagesContent] = await bucket.file(participantMessagesPath).download();
+          try {
+            currentMessages = JSON.parse(messagesContent.toString());
+            
+            // Ensure messages is always an array
+            if (!Array.isArray(currentMessages)) {
+              console.warn(`Messages for ${participantMessagesPath} is not an array`);
+              currentMessages = [];
+            }
+          } catch (parseError) {
+            console.error(`Error parsing messages for ${participantMessagesPath}:`, parseError);
+            currentMessages = [];
+          }
+        }
       } catch (err) {
         console.error(`Error getting messages for ${participant.email}:`, err);
         // If file doesn't exist, we'll create it with the new message

@@ -22,6 +22,7 @@ import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
 import './CreationRightsApp.css';
 import InstagramImport from './components/pages/InstagramImport';
+import ChatPage from './components/pages/ChatPage';
 
 const AppContent = () => {
   const { 
@@ -77,6 +78,9 @@ const AppContent = () => {
         return <NetworkPage />;
       case 'settings':
         return <Settings />;
+
+      case 'messages':
+        return <ChatPage />;
       
       default:
         return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;

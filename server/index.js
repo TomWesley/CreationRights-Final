@@ -157,8 +157,10 @@ app.post('/api/instagram/convert', async (req, res) => {
 // Add this to server/index.js
 
 // Endpoint to fetch users by type
+// Add this endpoint to your server/index.js file
+
+// Get all users
 app.get('/api/users', async (req, res) => {
-  console.log("here")
   try {
     const bucket = storage.bucket(BUCKET_NAME);
     
@@ -167,7 +169,7 @@ app.get('/api/users', async (req, res) => {
     
     // Filter for user profile files
     const userInfoFiles = files.filter(file => file.name.endsWith('/profile/info.json'));
-    console.log(userInfoFiles)
+    
     // Array to store user data
     const users = [];
     
@@ -182,11 +184,14 @@ app.get('/api/users', async (req, res) => {
         const pathParts = file.name.split('/');
         const username = pathParts[1];
         
-        // Add the user data to the array
+        // Add the user data to the array with only necessary fields (avoid sensitive data)
         users.push({
-          ...userData,
-          id: username, // Use the username as ID
-          status: 'active' // Default status
+          email: userData.email || username,
+          name: userData.name || username.split('@')[0],
+          photoUrl: userData.photoUrl,
+          location: userData.location,
+          specialties: userData.specialties || [],
+          contentTypes: userData.contentTypes || []
         });
       } catch (err) {
         console.error(`Error processing user file ${file.name}:`, err);
@@ -943,6 +948,324 @@ app.get('/api/debug/file/:path(*)', async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking file contents:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add these routes to server/index.js
+
+// User search endpoint
+app.get('/api/users/search', async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // List all files in the users directory
+    const [files] = await bucket.getFiles({ prefix: 'users/' });
+    
+    // Filter for user profile files
+    const userInfoFiles = files.filter(file => file.name.endsWith('/profile/info.json'));
+    
+    // Array to store user data
+    const users = [];
+    
+    // Process each user file
+    for (const file of userInfoFiles) {
+      try {
+        // Download and parse the user data
+        const [content] = await file.download();
+        const userData = JSON.parse(content.toString());
+        
+        // Get username from file path (users/username/profile/info.json)
+        const pathParts = file.name.split('/');
+        const username = pathParts[1];
+        
+        // Check if user matches search query (name or email)
+        const userEmail = userData.email || username;
+        const userName = userData.name || username.split('@')[0];
+        
+        if (
+          userEmail.toLowerCase().includes(query.toLowerCase()) ||
+          userName.toLowerCase().includes(query.toLowerCase())
+        ) {
+          // Add the user data to the array
+          users.push({
+            email: userEmail,
+            name: userName,
+            // Include other non-sensitive fields
+            photoUrl: userData.photoUrl,
+            location: userData.location,
+            specialties: userData.specialties || []
+          });
+        }
+      } catch (err) {
+        console.error(`Error processing user file ${file.name}:`, err);
+      }
+    }
+    
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Chat endpoints
+// Get all chats for a user
+app.get('/api/chats/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const sanitizedUserId = sanitizeEmail(userId);
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const chatsDirPath = `users/${sanitizedUserId}/chats`;
+    
+    // Check if chats directory exists
+    const [chatsExists] = await bucket.file(`${chatsDirPath}/`).exists();
+    
+    if (!chatsExists) {
+      // No chats directory yet, return empty array
+      return res.status(200).json([]);
+    }
+    
+    // List all chat files
+    const [files] = await bucket.getFiles({ prefix: chatsDirPath });
+    const chatInfoFiles = files.filter(file => file.name.endsWith('info.json'));
+    
+    const chats = [];
+    
+    // Process each chat file
+    for (const file of chatInfoFiles) {
+      try {
+        const [content] = await file.download();
+        const chatData = JSON.parse(content.toString());
+        
+        // Only include chats where the user is a participant
+        if (chatData.participants.some(p => p.email === userId)) {
+          chats.push(chatData);
+        }
+      } catch (err) {
+        console.error(`Error processing chat file ${file.name}:`, err);
+      }
+    }
+    
+    // Sort chats by last message time (most recent first)
+    chats.sort((a, b) => {
+      const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+      const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
+      return timeB - timeA;
+    });
+    
+    res.status(200).json(chats);
+  } catch (error) {
+    console.error('Error fetching chats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new chat
+app.post('/api/chats', async (req, res) => {
+  try {
+    const { participants } = req.body;
+    
+    if (!participants || participants.length < 2) {
+      return res.status(400).json({ error: 'At least two participants are required' });
+    }
+    
+    const chatId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const chatData = {
+      id: chatId,
+      participants,
+      created: new Date().toISOString(),
+      messages: [],
+      lastMessage: '',
+      lastMessageTime: null
+    };
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // Save chat info for each participant
+    for (const participant of participants) {
+      const sanitizedUserId = sanitizeEmail(participant.email);
+      const chatPath = `users/${sanitizedUserId}/chats/${chatId}`;
+      
+      // Create info.json file
+      await bucket.file(`${chatPath}/info.json`).save(
+        JSON.stringify(chatData),
+        { contentType: 'application/json' }
+      );
+      
+      // Create empty messages.json file
+      await bucket.file(`${chatPath}/messages.json`).save(
+        JSON.stringify([]),
+        { contentType: 'application/json' }
+      );
+    }
+    
+    res.status(201).json(chatData);
+  } catch (error) {
+    console.error('Error creating chat:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get chat messages
+app.get('/api/chats/:userId/:chatId/messages', async (req, res) => {
+  try {
+    const { userId, chatId } = req.params;
+    const sanitizedUserId = sanitizeEmail(userId);
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const messagesPath = `users/${sanitizedUserId}/chats/${chatId}/messages.json`;
+    
+    // Check if messages file exists
+    const [exists] = await bucket.file(messagesPath).exists();
+    
+    if (!exists) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+    
+    // Get messages
+    const [content] = await bucket.file(messagesPath).download();
+    const messages = JSON.parse(content.toString());
+    
+    res.status(200).json(messages);
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send a message
+app.post('/api/chats/:chatId/messages', async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { sender, content, timestamp } = req.body;
+    
+    if (!sender || !content) {
+      return res.status(400).json({ error: 'Sender and content are required' });
+    }
+    
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const message = {
+      id: messageId,
+      sender,
+      content,
+      timestamp: timestamp || new Date().toISOString(),
+      read: false
+    };
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // First, get the chat info to find all participants
+    const sanitizedSender = sanitizeEmail(sender);
+    const chatInfoPath = `users/${sanitizedSender}/chats/${chatId}/info.json`;
+    
+    // Check if chat info exists
+    const [chatInfoExists] = await bucket.file(chatInfoPath).exists();
+    
+    if (!chatInfoExists) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+    
+    // Get chat info
+    const [chatInfoContent] = await bucket.file(chatInfoPath).download();
+    const chatInfo = JSON.parse(chatInfoContent.toString());
+    
+    // Validate sender is a participant
+    if (!chatInfo.participants.some(p => p.email === sender)) {
+      return res.status(403).json({ error: 'Sender is not a participant in this chat' });
+    }
+    
+    // Update last message info
+    chatInfo.lastMessage = content;
+    chatInfo.lastMessageTime = message.timestamp;
+    
+    // For each participant, update messages and chat info
+    for (const participant of chatInfo.participants) {
+      const sanitizedParticipantId = sanitizeEmail(participant.email);
+      const participantMessagesPath = `users/${sanitizedParticipantId}/chats/${chatId}/messages.json`;
+      const participantChatInfoPath = `users/${sanitizedParticipantId}/chats/${chatId}/info.json`;
+      
+      // Get current messages
+      let currentMessages = [];
+      try {
+        const [messagesContent] = await bucket.file(participantMessagesPath).download();
+        currentMessages = JSON.parse(messagesContent.toString());
+      } catch (err) {
+        console.error(`Error getting messages for ${participant.email}:`, err);
+        // If file doesn't exist, we'll create it with the new message
+      }
+      
+      // Add new message
+      currentMessages.push({
+        ...message,
+        // Mark as read if sent by this participant
+        read: participant.email === sender
+      });
+      
+      // Save updated messages
+      await bucket.file(participantMessagesPath).save(
+        JSON.stringify(currentMessages),
+        { contentType: 'application/json' }
+      );
+      
+      // Update chat info
+      await bucket.file(participantChatInfoPath).save(
+        JSON.stringify(chatInfo),
+        { contentType: 'application/json' }
+      );
+    }
+    
+    res.status(201).json(message);
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Mark messages as read
+app.post('/api/chats/:userId/:chatId/read', async (req, res) => {
+  try {
+    const { userId, chatId } = req.params;
+    const sanitizedUserId = sanitizeEmail(userId);
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const messagesPath = `users/${sanitizedUserId}/chats/${chatId}/messages.json`;
+    
+    // Check if messages file exists
+    const [exists] = await bucket.file(messagesPath).exists();
+    
+    if (!exists) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+    
+    // Get messages
+    const [content] = await bucket.file(messagesPath).download();
+    const messages = JSON.parse(content.toString());
+    
+    // Mark all messages from other participants as read
+    const updatedMessages = messages.map(message => {
+      if (message.sender !== userId && !message.read) {
+        return { ...message, read: true };
+      }
+      return message;
+    });
+    
+    // Save updated messages
+    await bucket.file(messagesPath).save(
+      JSON.stringify(updatedMessages),
+      { contentType: 'application/json' }
+    );
+    
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error marking messages as read:', error);
     res.status(500).json({ error: error.message });
   }
 });

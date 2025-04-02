@@ -1,9 +1,10 @@
 // src/components/layout/AppSidebar.jsx
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck } from 'lucide-react';
 import FolderStructure from '../shared/FolderStructure';
 import { useAppContext } from '../../contexts/AppContext';
+import NotificationBadge from '../shared/NotificationBadge';
 
 const AppSidebar = () => {
   const { 
@@ -13,10 +14,49 @@ const AppSidebar = () => {
     activeView,
     setActiveView,
     setCurrentFolder,
-    setBreadcrumbs
+    setBreadcrumbs,
+    currentUser
   } = useAppContext();
   
   const isAgency = userType === 'agency';
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+
+  // Fetch unread message count
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      if (!currentUser?.email) return;
+      
+      try {
+        const response = await fetch(`${API_URL}/api/chats/${currentUser.email}`);
+        if (!response.ok) return;
+        
+        const chats = await response.json();
+        let count = 0;
+        
+        // For each chat, count unread messages from other users
+        for (const chat of chats) {
+          if (chat.messages) {
+            count += chat.messages.filter(msg => 
+              !msg.read && msg.sender !== currentUser.email
+            ).length;
+          }
+        }
+        
+        setUnreadMessageCount(count);
+      } catch (error) {
+        console.error('Error fetching unread count:', error);
+      }
+    };
+    
+    // Fetch initially
+    fetchUnreadCount();
+    
+    // Set up interval to check periodically
+    const interval = setInterval(fetchUnreadCount, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [currentUser]);
   
   return (
     <>
@@ -70,6 +110,23 @@ const AppSidebar = () => {
               </button>
             </div>
             
+            {/* Add the Messages button here */}
+            <div>
+              <button
+                className={`nav-item ${activeView === 'messages' ? 'nav-active' : ''}`}
+                onClick={() => {
+                  setActiveView('messages');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <div className="relative">
+                  <MessageSquare className="nav-icon" />
+                  <NotificationBadge count={unreadMessageCount} />
+                </div>
+                Messages
+              </button>
+            </div>
+            
             <div>
               <button
                 className={`nav-item ${activeView === 'network' ? 'nav-active' : ''}`}
@@ -78,7 +135,7 @@ const AppSidebar = () => {
                   setIsMobileMenuOpen(false);
                 }}
               >
-                <MessageSquare className="nav-icon" />
+                <Search className="nav-icon" />
                 Network
               </button>
             </div>

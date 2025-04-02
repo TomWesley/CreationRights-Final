@@ -179,8 +179,8 @@ export const AppProvider = ({ children }) => {
         throw new Error('Email is required');
       }
       
-      // Create a user object based on the email
-      const user = {
+      // Create a basic user object based on the email (only used if no existing profile is found)
+      const basicUser = {
         id: userEmail, // Use email as ID for simplicity
         email: userEmail,
         name: userEmail.split('@')[0], // Simple name from email
@@ -193,22 +193,69 @@ export const AppProvider = ({ children }) => {
       setCurrentFolder(null);
       setBreadcrumbs([]);
       
-      // Set user info
-      setCurrentUser(user);
-      setUserType(loginCredentials.accountType);
+      // First, check if user data already exists on the server
+      try {
+        console.log(`Checking if user profile exists for ${userEmail}`);
+        const existingUserData = await loadUserData(userEmail);
+        
+        if (existingUserData) {
+          console.log('Existing user profile found:', existingUserData);
+          
+          // Use the existing user data instead of the basic user object
+          setCurrentUser(existingUserData);
+          setUserType(existingUserData.type || existingUserData.userType || loginCredentials.accountType);
+          
+          // Save auth state to localStorage with the complete user data
+          const authState = {
+            isAuthenticated: true,
+            userType: existingUserData.type || existingUserData.userType || loginCredentials.accountType,
+            currentUser: existingUserData,
+            timestamp: new Date().getTime()
+          };
+          localStorage.setItem('authState', JSON.stringify(authState));
+          
+          // No need to save user data, as it already exists
+        } else {
+          console.log('No existing user profile found. Creating new profile.');
+          
+          // Set user info with basic data
+          setCurrentUser(basicUser);
+          setUserType(loginCredentials.accountType);
+          
+          // Save auth state to localStorage with basic user data
+          const authState = {
+            isAuthenticated: true,
+            userType: loginCredentials.accountType,
+            currentUser: basicUser,
+            timestamp: new Date().getTime()
+          };
+          localStorage.setItem('authState', JSON.stringify(authState));
+          
+          // Save basic user data to server only for new users
+          await saveUserData(userEmail, basicUser);
+        }
+      } catch (error) {
+        console.error('Error checking for existing user profile:', error);
+        
+        // Fallback to basic user creation as before
+        setCurrentUser(basicUser);
+        setUserType(loginCredentials.accountType);
+        
+        // Save auth state to localStorage
+        const authState = {
+          isAuthenticated: true,
+          userType: loginCredentials.accountType,
+          currentUser: basicUser,
+          timestamp: new Date().getTime()
+        };
+        localStorage.setItem('authState', JSON.stringify(authState));
+        
+        // Attempt to save user data
+        await saveUserData(userEmail, basicUser);
+      }
+      
+      // Set authentication state
       setIsAuthenticated(true);
-      
-      // Save auth state to localStorage (only authentication info)
-      const authState = {
-        isAuthenticated: true,
-        userType: loginCredentials.accountType,
-        currentUser: user,
-        timestamp: new Date().getTime() // Add timestamp for potential session expiry
-      };
-      localStorage.setItem('authState', JSON.stringify(authState));
-      
-      // Save user data to server
-      await saveUserData(userEmail, user);
       
       // Load user data from server based on email
       await loadUserDataFromServer(userEmail);

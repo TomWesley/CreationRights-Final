@@ -236,73 +236,94 @@ const Settings = () => {
   };
 
   // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Replace the handleSubmit function in Settings.jsx
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  setIsLoading(true);
+  setIsUploading(true);
+  
+  try {
+    let photoUrlToSave = profileData.photoUrl;
     
-    setIsLoading(true);
-    setIsUploading(true);
-    
-    try {
-      let photoUrlToSave = profileData.photoUrl;
-      
-      // If there's a new photo file, upload it
-      if (photoFile) {
-        try {
-          console.log("Uploading profile photo...");
-          photoUrlToSave = await uploadProfilePhoto(currentUser.email, photoFile);
-          console.log('Photo uploaded successfully:', photoUrlToSave);
-        } catch (photoError) {
-          console.error('Error uploading photo:', photoError);
-          // Continue with the local URL if upload fails
-        }
+    // If there's a new photo file, upload it
+    if (photoFile) {
+      try {
+        console.log("Uploading profile photo...");
+        photoUrlToSave = await uploadProfilePhoto(currentUser.email, photoFile);
+        console.log('Photo uploaded successfully:', photoUrlToSave);
+      } catch (photoError) {
+        console.error('Error uploading photo:', photoError);
+        // Continue with the local URL if upload fails
       }
-      
-      // Create updated user object with the new photo URL
-      const updatedUser = {
-        ...profileData,  // Use profileData as the base (it has all the form data)
-        email: currentUser.email,  // Ensure email is set correctly
-        photoUrl: photoUrlToSave,
-        // Add any other data from currentUser that isn't in profileData but should be preserved
-        userType: currentUser.userType || 'creator',
-        createdAt: currentUser.createdAt || new Date().toISOString()
-      };
-      
-      console.log("Saving user data:", updatedUser);
-      
-      // Save using the saveUserData function from api.js
-      const saved = await saveUserData(updatedUser.email, updatedUser);
-      
-      if (!saved) {
-        throw new Error('Failed to save user data');
-      }
-      
-      // Update local state (in context)
-      setCurrentUser(updatedUser);
-      
-      // Update auth state in localStorage
-      const authState = {
-        isAuthenticated: true,
-        userType: updatedUser.userType || 'creator',
-        currentUser: updatedUser,
-        timestamp: new Date().getTime()
-      };
-      localStorage.setItem('authState', JSON.stringify(authState));
-      
-      // Show success message
-      setProfileSaved(true);
-      
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setProfileSaved(false);
-      }, 3000);
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      alert('Failed to update profile. Please try again. Error: ' + error.message);
-    } finally {
-      setIsLoading(false);
-      setIsUploading(false);
     }
-  };
+    
+    // Create a complete user data object with all profile fields
+    const completeUserData = {
+      // Basic user info (always required)
+      id: currentUser.email,
+      email: currentUser.email,
+      name: profileData.name || currentUser.name || currentUser.email.split('@')[0],
+      type: currentUser.type || 'creator',
+      userType: currentUser.userType || 'creator',
+      
+      // Profile data from the form
+      bio: profileData.bio || '',
+      website: profileData.website || '',
+      location: profileData.location || '',
+      photoUrl: photoUrlToSave || null,
+      specialties: profileData.specialties || [],
+      contentTypes: profileData.contentTypes || [],
+      socialLinks: profileData.socialLinks || {},
+      education: profileData.education || [],
+      exhibitions: profileData.exhibitions || [],
+      awards: profileData.awards || [],
+      
+      // Timestamps
+      createdAt: currentUser.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      
+      // Status
+      status: profileData.status || currentUser.status || 'active'
+    };
+    
+    console.log("Saving complete user data:", completeUserData);
+    
+    // Save using the saveUserData function from api.js
+    const saved = await saveUserData(completeUserData.email, completeUserData);
+    
+    if (!saved) {
+      throw new Error('Failed to save user data');
+    }
+    
+    // Update local state (in context)
+    setCurrentUser(completeUserData);
+    
+    // Update auth state in localStorage
+    const authState = {
+      isAuthenticated: true,
+      userType: completeUserData.userType || 'creator',
+      currentUser: completeUserData,
+      timestamp: new Date().getTime()
+    };
+    localStorage.setItem('authState', JSON.stringify(authState));
+    
+    // Show success message
+    setProfileSaved(true);
+    
+    // Hide success message after 3 seconds
+    setTimeout(() => {
+      setProfileSaved(false);
+    }, 3000);
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    alert('Failed to update profile. Please try again. Error: ' + error.message);
+  } finally {
+    setIsLoading(false);
+    setIsUploading(false);
+  }
+};
 
   return (
     <div className="settings-view">

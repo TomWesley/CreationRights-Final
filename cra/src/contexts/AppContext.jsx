@@ -14,13 +14,7 @@ import {
 
 // Sample data - used as fallback or initial data
 const initialFolders = [
-  { id: 'f1', name: 'Images', parentId: null },
-  { id: 'f2', name: 'Written Works', parentId: null },
-  { id: 'f3', name: 'Music', parentId: null },
-  { id: 'f4', name: 'Photography', parentId: 'f1' },
-  { id: 'f5', name: 'Illustrations', parentId: 'f1' },
-  { id: 'f6', name: 'Short Stories', parentId: 'f2' },
-  { id: 'f7', name: 'Blog Posts', parentId: 'f2' },
+  
 ];
 
 // Create context
@@ -118,13 +112,7 @@ export const AppProvider = ({ children }) => {
       if (userFolders && userFolders.length > 0) {
         console.log(`Loaded ${userFolders.length} folders for user ${userEmail}`);
         setFolders(userFolders);
-      } else {
-        // If no folders on server, save initial ones
-        console.log(`No folders found, initializing for user ${userEmail}`);
-        await saveFolders(userEmail, initialFolders);
-        setFolders(initialFolders);
       }
-      
       // Try to load creations from server only
       const userCreations = await loadCreations(userEmail);
       if (userCreations && userCreations.length > 0) {

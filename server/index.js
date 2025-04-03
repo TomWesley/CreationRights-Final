@@ -101,33 +101,32 @@ app.get('/api/instagram/:username', async (req, res) => {
     console.log(`Processing Instagram request for username: ${normalizedUsername}`);
     
     // Set a longer timeout for the request to avoid abrupt disconnections
-    req.setTimeout(120000); // 2 minute timeout
+    req.setTimeout(60000); // 1 minute timeout (reduced from 2 minutes)
     
     // Explicitly wrap the Instagram service call in a try-catch block
-    let posts;
     try {
       // Use the existing instagramService that leverages Apify
-      posts = await instagramService.fetchInstagramPosts(normalizedUsername);
+      const profileData = await instagramService.fetchInstagramProfile(normalizedUsername);
       
-      // Validate the response to ensure we have posts
-      if (!posts || !Array.isArray(posts) || posts.length === 0) {
+      // Validate the response to ensure we have profile data
+      if (!profileData || typeof profileData !== 'object') {
         return res.status(404).json({
-          error: 'No posts found',
-          message: 'No Instagram posts found for this username. The account may be private or have no posts.'
+          error: 'Profile not found',
+          message: 'No Instagram profile found for this username. The account may not exist or may be private.'
         });
       }
       
-      console.log(`Successfully fetched ${posts.length} Instagram posts for ${normalizedUsername}`);
+      console.log(`Successfully fetched Instagram profile for ${normalizedUsername}`);
       
-      // Return the posts as JSON
-      return res.json(posts);
+      // Return the profile data as JSON
+      return res.json(profileData);
     } catch (fetchError) {
-      console.error('Error fetching Instagram posts:', fetchError);
+      console.error('Error fetching Instagram profile:', fetchError);
       
       // Return a proper JSON error response
       return res.status(500).json({
         error: 'Instagram API Error',
-        message: fetchError.message || 'Failed to fetch Instagram posts. Please try again later.'
+        message: fetchError.message || 'Failed to fetch Instagram profile. Please try again later.'
       });
     }
   } catch (error) {

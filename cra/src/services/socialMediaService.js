@@ -5,8 +5,6 @@
  * Integrated with the existing server-side Apify API
  */
 
-// Fetch Instagram profile data using the existing Apify integration
-
 const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
 export const fetchInstagramProfile = async (username) => {
@@ -18,7 +16,7 @@ export const fetchInstagramProfile = async (username) => {
       
       // Use the existing Instagram API endpoint which leverages Apify
       const response = await fetch(`${API_URL}/api/instagram/${normalizedUsername}`);
-      
+      console.log('trying things here', response);
       // Check if response is OK
       if (!response.ok) {
         const errorText = await response.text();
@@ -46,208 +44,118 @@ export const fetchInstagramProfile = async (username) => {
       }
       
       // Parse the text as JSON
-      let posts;
+      let profileData;
       try {
-        posts = JSON.parse(responseText);
+        profileData = JSON.parse(responseText);
+        // Log the raw profile data from API
+        console.log('pure response', responseText)
+        console.log('Raw API response data:', profileData);
       } catch (parseError) {
         console.error('Error parsing JSON response:', parseError);
         console.error('Response text:', responseText.substring(0, 200));
         throw new Error('Failed to parse Instagram data as JSON. The service may be returning invalid data.');
       }
       
-      // Validate posts array
-      if (!Array.isArray(posts)) {
-        console.error('Response is not an array:', posts);
-        throw new Error('Invalid response format from Instagram service. Expected an array of posts.');
+      // Validate profile data
+      if (!profileData || typeof profileData !== 'object') {
+        console.error('Response is not a valid profile object:', profileData);
+        throw new Error('Invalid response format from Instagram service. Expected a profile object.');
       }
       
-      if (posts.length === 0) {
-        throw new Error('No posts found for this Instagram profile. The account may be private or have no posts.');
+      // Make sure we have the essential profile fields
+      if (!profileData.username) {
+        profileData.username = normalizedUsername;
       }
       
-      // Calculate analytics from posts data
-      const profileData = processInstagramData(normalizedUsername, posts);
+      // Convert string number values to actual numbers
+      if (typeof profileData.followers === 'string') {
+        profileData.followers = parseInt(profileData.followers.replace(/,/g, ''), 10);
+      }
+      
+      if (typeof profileData.following === 'string') {
+        profileData.following = parseInt(profileData.following.replace(/,/g, ''), 10);
+      }
+      
+      if (typeof profileData.posts === 'string') {
+        profileData.posts = parseInt(profileData.posts.replace(/,/g, ''), 10);
+      }
+      
+      // Ensure all required fields are present and properly formatted
+      const formattedProfile = ensureProfileFormat(profileData);
+      console.log('Formatted profile data:', formattedProfile);
       
       // Save the data to user profile (this will also save to GCS via the API)
-      await saveInstagramProfile(normalizedUsername, profileData);
+      await saveInstagramProfile(normalizedUsername, formattedProfile);
       
-      return profileData;
+      return formattedProfile;
     } catch (error) {
       console.error('Error in fetchInstagramProfile:', error);
       throw error;
     }
   };
   
-  // Process Instagram posts to extract analytics data
-  function processInstagramData(username, posts) {
-    // Validate posts array
-    if (!Array.isArray(posts) || posts.length === 0) {
-      throw new Error('No posts data found for this Instagram profile');
-    }
+  /**
+   * Ensure the profile data has all required fields with proper format
+   */
+  function ensureProfileFormat(profileData) {
+    const username = profileData.username || '';
     
-    console.log(`Processing ${posts.length} posts for analytics...`);
-    
-    // Calculate analytics metrics
-    let totalLikes = 0;
-    let totalComments = 0;
-    
-    // Content type counts
-    let photoCount = 0;
-    let videoCount = 0;
-    let carouselCount = 0;
-    
-    // Engagement by content type
-    const photoEngagement = { totalLikes: 0, totalComments: 0 };
-    const videoEngagement = { totalLikes: 0, totalComments: 0, totalViews: 0 };
-    
-    // Monthly engagement tracking
-    const monthlyEngagement = {
-      jan: { likes: 0, comments: 0, count: 0 },
-      feb: { likes: 0, comments: 0, count: 0 },
-      mar: { likes: 0, comments: 0, count: 0 },
-      apr: { likes: 0, comments: 0, count: 0 },
-      may: { likes: 0, comments: 0, count: 0 },
-      jun: { likes: 0, comments: 0, count: 0 },
-      jul: { likes: 0, comments: 0, count: 0 },
-      aug: { likes: 0, comments: 0, count: 0 },
-      sep: { likes: 0, comments: 0, count: 0 },
-      oct: { likes: 0, comments: 0, count: 0 },
-      nov: { likes: 0, comments: 0, count: 0 },
-      dec: { likes: 0, comments: 0, count: 0 }
-    };
-    
-    // Get profile data from the first post (should be the same in all)
-    let followers = 0;
-    let following = 0;
-    let profilePicture = '';
-    let bio = '';
-    
-    // Process each post
-    posts.forEach(post => {
-      // Update total likes and comments
-      const likes = post.likes || 0;
-      const comments = post.comments || 0;
-      
-      totalLikes += likes;
-      totalComments += comments;
-      
-      // Categorize by content type
-      const contentType = post.type || 'Image';
-      if (contentType === 'Video') {
-        videoCount++;
-        videoEngagement.totalLikes += likes;
-        videoEngagement.totalComments += comments;
-        if (post.videoView) videoEngagement.totalViews += post.videoView;
-      } else if (contentType === 'Carousel') {
-        carouselCount++;
-        // For simplicity, count carousels as photos in engagement metrics
-        photoEngagement.totalLikes += likes;
-        photoEngagement.totalComments += comments;
-      } else {
-        // Default to Image
-        photoCount++;
-        photoEngagement.totalLikes += likes;
-        photoEngagement.totalComments += comments;
-      }
-      
-      // Categorize by month (if timestamp is available)
-      if (post.publishedAt) {
-        const date = new Date(post.publishedAt);
-        const monthAbbrs = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-        const monthKey = monthAbbrs[date.getMonth()];
-        
-        if (monthlyEngagement[monthKey]) {
-          monthlyEngagement[monthKey].likes += likes;
-          monthlyEngagement[monthKey].comments += comments;
-          monthlyEngagement[monthKey].count++;
-        }
-      }
-      
-      // Extract profile data - use the first available values
-      if (!followers && post.authorFollowers) followers = post.authorFollowers;
-      if (!following && post.authorFollowing) following = post.authorFollowing;
-      if (!profilePicture && post.authorPicture) profilePicture = post.authorPicture;
-      if (!bio && post.authorBio) bio = post.authorBio;
-    });
-    
-    // Calculate averages
-    const avgLikes = posts.length > 0 ? Math.round(totalLikes / posts.length) : 0;
-    const avgComments = posts.length > 0 ? Math.round(totalComments / posts.length) : 0;
-    
-    // Calculate content type percentages
-    const totalPosts = posts.length;
-    const photoPercentage = Math.round((photoCount / totalPosts) * 100);
-    const videoPercentage = Math.round((videoCount / totalPosts) * 100);
-    const carouselPercentage = Math.round((carouselCount / totalPosts) * 100);
-    
-    // Average engagement by content type
-    if (photoCount > 0) {
-      photoEngagement.avgLikes = Math.round(photoEngagement.totalLikes / photoCount);
-      photoEngagement.avgComments = Math.round(photoEngagement.totalComments / photoCount);
-    }
-    
-    if (videoCount > 0) {
-      videoEngagement.avgLikes = Math.round(videoEngagement.totalLikes / videoCount);
-      videoEngagement.avgComments = Math.round(videoEngagement.totalComments / videoCount);
-      videoEngagement.avgViews = Math.round(videoEngagement.totalViews / videoCount);
-    }
-    
-    // Normalize monthly engagement (average per post in that month)
-    Object.keys(monthlyEngagement).forEach(month => {
-      const data = monthlyEngagement[month];
-      if (data.count > 0) {
-        data.likes = Math.round(data.likes / data.count);
-        data.comments = Math.round(data.comments / data.count);
-        // Delete count as it's no longer needed
-        delete data.count;
-      }
-    });
-    
-    // Construct profile data object
+    // Create a properly formatted profile with default values for missing fields
     return {
       username: username,
-      profilePicture: profilePicture || `https://ui-avatars.com/api/?name=${username}&background=random&color=fff`,
-      followers: followers || 0,
-      following: following || 0,
-      posts: totalPosts,
-      avgLikes: avgLikes,
-      avgComments: avgComments,
-      bio: bio || `Instagram profile for ${username}`,
-      lastUpdated: new Date().toISOString(),
+      profilePicture: profileData.profilePicture || `https://ui-avatars.com/api/?name=${username}&background=random&color=fff`,
+      followers: profileData.followers || 0,
+      following: profileData.following || 0,
+      posts: profileData.posts || 0,
+      avgLikes: profileData.avgLikes || 0,
+      avgComments: profileData.avgComments || 0,
+      bio: profileData.bio || `Instagram profile for ${username}`,
+      lastUpdated: profileData.lastUpdated || new Date().toISOString(),
       
-      // Monthly engagement (already normalized to avg per post)
-      monthlyEngagement: monthlyEngagement,
+      // Monthly engagement - use existing or create empty structure
+      monthlyEngagement: profileData.monthlyEngagement || createEmptyMonthlyEngagement(),
       
       // Content distribution
-      contentDistribution: {
-        photos: photoPercentage || 0,
-        videos: videoPercentage || 0,
-        carousels: carouselPercentage || 0
+      contentDistribution: profileData.contentDistribution || {
+        photos: 70,
+        videos: 20,
+        carousels: 10
       },
       
       // Engagement by content type
-      photoEngagement: {
-        avgLikes: photoEngagement.avgLikes || 0,
-        avgComments: photoEngagement.avgComments || 0
+      photoEngagement: profileData.photoEngagement || {
+        avgLikes: 0,
+        avgComments: 0
       },
       
-      videoEngagement: {
-        avgViews: videoEngagement.avgViews || 0,
-        avgLikes: videoEngagement.avgLikes || 0,
-        avgComments: videoEngagement.avgComments || 0
+      videoEngagement: profileData.videoEngagement || {
+        avgViews: 0,
+        avgLikes: 0,
+        avgComments: 0
       },
       
-      // Store raw post data (first 10 posts max) for potential display
-      recentPosts: posts.slice(0, 10).map(post => ({
-        id: post.id,
-        type: post.type || 'Image',
-        thumbnailUrl: post.thumbnailUrl || post.imageUrl,
-        likes: post.likes || 0,
-        comments: post.comments || 0,
-        publishedAt: post.publishedAt || null,
-        caption: post.caption || '',
-        url: post.url || post.sourceUrl
-      }))
+      // Recent posts - if available
+      recentPosts: profileData.recentPosts || []
+    };
+  }
+  
+  /**
+   * Create empty monthly engagement data structure
+   */
+  function createEmptyMonthlyEngagement() {
+    return {
+      jan: { likes: 0, comments: 0 },
+      feb: { likes: 0, comments: 0 },
+      mar: { likes: 0, comments: 0 },
+      apr: { likes: 0, comments: 0 },
+      may: { likes: 0, comments: 0 },
+      jun: { likes: 0, comments: 0 },
+      jul: { likes: 0, comments: 0 },
+      aug: { likes: 0, comments: 0 },
+      sep: { likes: 0, comments: 0 },
+      oct: { likes: 0, comments: 0 },
+      nov: { likes: 0, comments: 0 },
+      dec: { likes: 0, comments: 0 }
     };
   }
   

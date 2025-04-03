@@ -20,22 +20,30 @@ import {
 } from 'recharts';
 
 const InstagramCard = ({ profileData, onDisconnect }) => {
-  const { currentUser, setCurrentUser } = useAppContext();
-  const [activeTab, setActiveTab] = useState('overview');
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [recentPostsVisible, setRecentPostsVisible] = useState(false);
-  
-  // Format numbers with K, M, etc.
-  const formatNumber = (num) => {
-    if (!num) return '0';
-    if (num >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
-  };
+    const { currentUser, setCurrentUser } = useAppContext();
+    const [activeTab, setActiveTab] = useState('overview');
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [recentPostsVisible, setRecentPostsVisible] = useState(false);
+    
+    // Debug log to see the raw profile data
+    console.log('Raw Instagram profile data:', profileData);
+    
+    // Format numbers with K, M, etc.
+    const formatNumber = (num) => {
+      if (num === undefined || num === null) return '0';
+      
+      // Make sure num is a number
+      const numValue = Number(num);
+      if (isNaN(numValue)) return '0';
+      
+      if (numValue >= 1000000) {
+        return (numValue / 1000000).toFixed(1) + 'M';
+      }
+      if (numValue >= 1000) {
+        return (numValue / 1000).toFixed(1) + 'K';
+      }
+      return numValue.toString();
+    };
   
   // Calculate engagement rate
   const engagementRate = () => {

@@ -24,6 +24,7 @@ import SocialMediaPage from './components/pages/SocialMediaPage';
 import './CreationRightsApp.css';
 import InstagramImport from './components/pages/InstagramImport';
 import ChatPage from './components/pages/ChatPage';
+import Footer from './components/layout/Footer';
 
 const AppContent = () => {
   const { 
@@ -108,7 +109,11 @@ const AppContent = () => {
       
       {showNewFolderModal && <NewFolderModal />}
       {isLoading && <LoadingIndicator />}
+      <Footer />
     </div>
+  
+   
+
   );
 };
 

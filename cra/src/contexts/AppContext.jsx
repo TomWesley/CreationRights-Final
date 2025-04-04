@@ -28,7 +28,11 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   
   // UI state
-  const [activeView, setActiveView] = useState('dashboard');
+  // Initialize activeView from localStorage if available
+  const [activeView, setActiveView] = useState(() => {
+    const savedView = localStorage.getItem('activeView');
+    return savedView || 'dashboard';
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
@@ -63,6 +67,13 @@ export const AppProvider = ({ children }) => {
     accountType: 'creator' 
   });
 
+  // Save activeView to localStorage whenever it changes
+  useEffect(() => {
+    if (activeView && isAuthenticated) {
+      localStorage.setItem('activeView', activeView);
+    }
+  }, [activeView, isAuthenticated]);
+
   // Load authentication state from localStorage
   useEffect(() => {
     const loadAuthState = async () => {
@@ -84,11 +95,22 @@ export const AppProvider = ({ children }) => {
             
             // Load data for this specific user from server only
             await loadUserDataFromServer(authState.currentUser.email);
+          } else {
+            // Not authenticated, clear activeView
+            setActiveView('dashboard');
+            localStorage.removeItem('activeView');
           }
+        } else {
+          // Not authenticated, clear activeView
+          setActiveView('dashboard');
+          localStorage.removeItem('activeView');
         }
       } catch (error) {
         console.error('Error loading auth state:', error);
         localStorage.removeItem('authState');
+        // Reset to dashboard on error
+        setActiveView('dashboard');
+        localStorage.removeItem('activeView');
       } finally {
         setIsLoading(false);
       }
@@ -269,6 +291,10 @@ export const AppProvider = ({ children }) => {
     setIsAuthenticated(false);
     setCurrentUser(null);
     setShowLoginModal(false);
+    
+    // Reset view to dashboard and clear from localStorage
+    setActiveView('dashboard');
+    localStorage.removeItem('activeView');
     
     // Clear auth state from localStorage
     localStorage.removeItem('authState');

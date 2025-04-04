@@ -529,3 +529,73 @@ export const getDirectProfilePhotoUrl = (email) => {
   const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
   return `${API_URL}/api/users/${sanitizedEmail}/profile-photo?t=${Date.now()}`;
 };
+
+// Add these functions to your existing api.js file
+
+/**
+ * Save social profiles to storage
+ * @param {string} userEmail - User's email to use as ID
+ * @param {Object} socialProfiles - Object containing social media profile data
+ * @returns {Promise<Object>} - A promise that resolves to the saved data
+ */
+export const saveSocialProfiles = async (userEmail, socialProfiles) => {
+  try {
+    if (!userEmail) {
+      throw new Error('User email is required');
+    }
+    
+    // Store in local storage as a fallback/demo mechanism
+    localStorage.setItem(`socialProfiles_${userEmail}`, JSON.stringify(socialProfiles));
+    console.log(`Saved social profiles for user ${userEmail} to localStorage`);
+    
+    // In a real application, you would make an API call here:
+    // const response = await fetch(`/api/users/${userEmail}/social-profiles`, {
+    //   method: 'PUT',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify(socialProfiles)
+    // });
+    // return response.json();
+    
+    return socialProfiles;
+  } catch (error) {
+    console.error('Error saving social profiles:', error);
+    throw error;
+  }
+};
+
+/**
+ * Load social profiles from storage
+ * @param {string} userEmail - User's email to use as ID
+ * @returns {Promise<Object>} - A promise that resolves to the loaded data
+ */
+export const loadSocialProfiles = async (userEmail) => {
+  try {
+    if (!userEmail) {
+      throw new Error('User email is required');
+    }
+    
+    // In a real application, you would make an API call here:
+    // const response = await fetch(`/api/users/${userEmail}/social-profiles`);
+    // return response.json();
+    
+    // As a fallback/demo, load from localStorage
+    const socialProfilesJson = localStorage.getItem(`socialProfiles_${userEmail}`);
+    
+    if (socialProfilesJson) {
+      const socialProfiles = JSON.parse(socialProfilesJson);
+      console.log(`Loaded social profiles for user ${userEmail} from localStorage`);
+      return socialProfiles;
+    }
+    
+    // Return empty social data if nothing found
+    return {
+      instagram: null,
+      twitter: null,
+      tiktok: null,
+      linkedin: null
+    };
+  } catch (error) {
+    console.error('Error loading social profiles:', error);
+    throw error;
+  }
+};

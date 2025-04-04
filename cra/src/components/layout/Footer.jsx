@@ -7,7 +7,7 @@ const Footer = () => {
         <div className="footer-brand">
           <div className="footer-logo">
             <img src="/crlogo.svg" alt="Creation Rights Logo" className="footer-logo-img" />
-            <span className="footer-logo-text">Creation Rights</span>
+            
           </div>
           <p className="footer-copyright">Copyright © 2025</p>
         </div>

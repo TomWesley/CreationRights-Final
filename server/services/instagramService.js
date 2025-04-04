@@ -37,87 +37,164 @@ async function fetchInstagramProfile(username) {
  * Make a simple API call to get Instagram profile info
  */
 async function fetchBasicProfileInfo(username) {
-    // Use the standard instagram scraper
-    const apiUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync`;
-    
-    // Simplest possible payload - just the username as the Apify docs specify
-    const payload = {
-      "usernames": [username]
-    };
-    
-    console.log('Making API request to Apify...');
-    
     try {
-      // Create headers according to Apify docs
+      console.log('Making API request to start Apify actor...');
+      
+      // 1. Start the actor run
+      const startRunUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/runs`;
+      
       const myHeaders = new Headers();
       myHeaders.append("Content-Type", "application/json");
       myHeaders.append("Accept", "application/json");
       myHeaders.append("Authorization", `Bearer ${APIFY_API_TOKEN}`);
       
-      // Create request options
       const requestOptions = {
         method: "POST",
         headers: myHeaders,
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          "usernames": [username]
+        }),
         redirect: "follow"
       };
       
-      // Make the fetch request
-      const fetchResponse = await fetch(apiUrl, requestOptions);
+      // Start the run
+      const runResponse = await fetch(startRunUrl, requestOptions);
       
-      // Check if the response is OK
-      if (!fetchResponse.ok) {
-        console.error(`HTTP error! Status: ${fetchResponse.status}`);
-        const errorText = await fetchResponse.text();
+      if (!runResponse.ok) {
+        console.error(`HTTP error! Status: ${runResponse.status}`);
+        const errorText = await runResponse.text();
         console.error('Error response:', errorText);
-        throw new Error(`HTTP error! Status: ${fetchResponse.status}`);
+        throw new Error(`HTTP error starting actor run! Status: ${runResponse.status}`);
       }
       
-      // Get the raw text first to debug
-      const rawResponseText = await fetchResponse.text();
-      console.log('Raw response text (first 500 chars):', rawResponseText.substring(0, 500));
+      const runData = await runResponse.json();
+      console.log('Actor run started with ID:', runData.id);
       
-      // Check if we have actual content
-      if (!rawResponseText || rawResponseText.trim() === '') {
-        console.error('Empty response received from Apify');
-        throw new Error('Empty response received from Apify');
+      // 2. Wait for the run to complete (poll the status)
+      const runId = runData.id;
+      let runStatus = 'RUNNING';
+      const statusUrl = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/runs/${runId}`;
+      
+      console.log('Waiting for actor run to complete...');
+      
+      // Poll until the status is SUCCEEDED or FAILED
+      while (runStatus === 'RUNNING' || runStatus === 'READY') {
+        // Wait a bit before checking again (2 seconds)
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        const statusResponse = await fetch(statusUrl, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${APIFY_API_TOKEN}`
+          }
+        });
+        
+        if (!statusResponse.ok) {
+          console.error(`Failed to get run status. Status: ${statusResponse.status}`);
+          break;
+        }
+        
+        const statusData = await statusResponse.json();
+        runStatus = statusData.status;
+        console.log('Current run status:', runStatus);
       }
       
-      // Parse the text manually
-      let responseData;
-      try {
-        responseData = JSON.parse(rawResponseText);
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Invalid JSON received (first 500 chars):', rawResponseText.substring(0, 500));
-        throw new Error('Failed to parse JSON response from Apify');
+      if (runStatus !== 'SUCCEEDED') {
+        throw new Error(`Actor run failed with status: ${runStatus}`);
       }
       
-      console.log('Successfully received and parsed response from Apify');
+      // 3. Get the results from the default dataset
+      console.log('Actor run completed successfully, retrieving results...');
+      const datasetId = runData.defaultDatasetId;
+      const datasetUrl = `https://api.apify.com/v2/datasets/${datasetId}/items`;
       
-      // Rest of the code remains the same...
-      // Process the API response
-      let profileData;
+      const dataResponse = await fetch(datasetUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${APIFY_API_TOKEN}`
+        }
+      });
       
-      // Log the actual response for debugging
-      console.log('Response from Apify:', JSON.stringify(responseData).substring(0, 1000));
-      
-      // Check if we have a valid response structure
-      if (responseData && Array.isArray(responseData) && responseData.length > 0) {
-        profileData = responseData[0]; // Get the first result from the array
-        console.log('Found profile data at index 0');
-      } else if (responseData && !Array.isArray(responseData)) {
-        // Handle case where response might not be an array
-        profileData = responseData;
-        console.log('Found profile data in response object');
-      } else {
-        console.error('Unexpected response format:', typeof responseData);
-        console.error('Response data:', JSON.stringify(responseData).substring(0, 500));
-        throw new Error('Unexpected response format from Apify');
+      if (!dataResponse.ok) {
+        console.error(`HTTP error getting dataset! Status: ${dataResponse.status}`);
+        throw new Error(`Failed to get dataset results. Status: ${dataResponse.status}`);
       }
       
-      // Continue with formatting the profile data...
-      // (rest of your code)
+      const profileResults = await dataResponse.json();
+      console.log('Successfully retrieved profile results');
+      
+      // Log the first part of the response to debug
+      const responsePreview = JSON.stringify(profileResults).substring(0, 500);
+      console.log('Results preview:', responsePreview + '...');
+      
+      if (!profileResults || !Array.isArray(profileResults) || profileResults.length === 0) {
+        console.error('No profile data found in results');
+        throw new Error('No profile data found in Apify results');
+      }
+      
+      // Get the first result (the requested username's profile)
+      const profileData = profileResults[0];
+      
+      // Continue with your formatting logic...
+      console.log('Extracted profile data:', {
+        username: profileData.username,
+        followersCount: profileData.followersCount, 
+        followsCount: profileData.followsCount,
+        postsCount: profileData.postsCount
+      });
+      
+      // Format the profile data for our app (rest of your original code)
+      const formattedProfile = {
+        username: profileData.username || username,
+        profilePicture: profileData.profilePicUrl || `https://ui-avatars.com/api/?name=${username}&background=random&color=fff`,
+        followers: profileData.followersCount || 0,
+        following: profileData.followsCount || 0,
+        posts: profileData.postsCount || 0,
+        bio: profileData.biography || `Instagram profile for ${username}`,
+        fullName: profileData.fullName || username,
+        isVerified: profileData.verified || false,
+        lastUpdated: new Date().toISOString(),
+        
+        // Rest of your formatting code...
+        _debug: {
+          rawFollowersCount: profileData.followersCount,
+          rawFollowsCount: profileData.followsCount,
+          rawPostsCount: profileData.postsCount
+        },
+        
+        avgLikes: Math.floor(profileData.followersCount * 0.03) || 0,
+        avgComments: Math.floor(profileData.followersCount * 0.002) || 0,
+        
+        monthlyEngagement: createPlaceholderEngagement(),
+        
+        contentDistribution: {
+          photos: 70,
+          videos: 20,
+          carousels: 10
+        },
+        
+        photoEngagement: {
+          avgLikes: Math.floor(profileData.followersCount * 0.03) || 0,
+          avgComments: Math.floor(profileData.followersCount * 0.002) || 0
+        },
+        
+        videoEngagement: {
+          avgViews: Math.floor(profileData.followersCount * 0.08) || 0,
+          avgLikes: Math.floor(profileData.followersCount * 0.025) || 0,
+          avgComments: Math.floor(profileData.followersCount * 0.001) || 0
+        },
+        
+        recentPosts: []
+      };
+      
+      console.log('Formatted profile data:', {
+        username: formattedProfile.username,
+        followers: formattedProfile.followers,
+        following: formattedProfile.following
+      });
+      
+      return formattedProfile;
+      
     } catch (error) {
       console.error('Error fetching Instagram profile:', error);
       throw error;

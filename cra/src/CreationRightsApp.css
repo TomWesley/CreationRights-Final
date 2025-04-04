@@ -161,15 +161,21 @@
   }
   
   .app-footer {
-    background-color: #1f2937;
+    
+    border-top: solid white;
+    
+    background-color: #000000;
     color: white;
-    padding: 2rem 0;
+    
+    max-height: 55px;
+    min-height: 45px;
   }
   
   .footer-content {
+    padding-top: 8px;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 1rem;
+    
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -198,18 +204,18 @@
   }
   
   .footer-logo-img {
-    height: 1.5rem;
+    height: .8rem;
     width: auto;
     margin-right: 0.5rem;
   }
   
   .footer-logo-text {
-    font-size: 1.125rem;
+    font-size: .6rem;
     font-weight: bold;
   }
   
   .footer-copyright {
-    font-size: 0.875rem;
+    font-size: 0.575rem;
     color: #9ca3af;
   }
   

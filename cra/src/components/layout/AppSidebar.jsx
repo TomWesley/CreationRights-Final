@@ -141,18 +141,7 @@ const AppSidebar = () => {
               </button>
             </div>
             
-            <div>
-              <button
-                className={`nav-item ${activeView === 'network' ? 'nav-active' : ''}`}
-                onClick={() => {
-                  setActiveView('network');
-                  setIsMobileMenuOpen(false);
-                }}
-              >
-                <Search className="nav-icon" />
-                Network
-              </button>
-            </div>
+            
             
             {isAgency && (
               <div>

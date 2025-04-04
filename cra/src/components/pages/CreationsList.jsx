@@ -119,17 +119,7 @@ const CreationsList = () => {
         <Youtube className="w-4 h-4 mr-2" />
         Import from YouTube
       </button>
-      {/* Add this new button */}
-      <button
-        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-        onClick={() => {
-          setActiveView('instagramImport');
-          setShowImportDropdown(false);
-        }}
-      >
-        <Instagram className="w-4 h-4 mr-2" />
-        Import from Instagram
-      </button>
+      
     </div>
   </div>
 )}
@@ -180,9 +170,7 @@ const CreationsList = () => {
               <Youtube className="button-icon" /> Import from YouTube
             </Button>
             {/* Add this new button */}
-            <Button variant="outline" onClick={() => setActiveView('instagramImport')}>
-              <Instagram className="button-icon" /> Import from Instagram
-            </Button>
+            
             <Button variant="outline" onClick={() => setShowNewFolderModal(true)}>
               <FolderPlus className="button-icon" /> New Folder
             </Button>

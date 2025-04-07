@@ -1,4 +1,5 @@
 // src/App.jsx - Updated with Social Media Page
+import MyCreationsList from './components/pages/MyCreationsList';
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 import LandingPage from './components/pages/LandingPage';
@@ -6,7 +7,6 @@ import AppHeader from './components/layout/AppHeader';
 import AppSidebar from './components/layout/AppSidebar';
 import CreatorDashboard from './components/pages/CreatorDashboard';
 import AgencyDashboard from './components/pages/AgencyDashboard';
-import CreationsList from './components/pages/CreationsList';
 import AllCreationsList from './components/pages/AllCreationsList';
 import ArtistsList from './components/pages/ArtistsList';
 import CreatorManagement from './components/pages/CreatorManagement';
@@ -49,8 +49,11 @@ const AppContent = () => {
         return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
       
       // Creator-specific views
+      case 'myCreations':
+        return <MyCreationsList />; // Updated to use MyCreationsList
       case 'youtubeImport':
         return <YouTubeImport />;
+      
       // Social Media page - available for all user types
       case 'socialMedia':
         return <SocialMediaPage />;
@@ -68,7 +71,7 @@ const AppContent = () => {
         return <NetworkPage />;
       case 'settings':
         return <Settings />;
-
+  
       case 'messages':
         return <ChatPage />;
       

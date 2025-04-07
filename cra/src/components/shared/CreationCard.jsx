@@ -1,24 +1,24 @@
-// src/components/shared/CreationCard.jsx - Modified for Agency View
+// src/components/shared/CreationCard.jsx - Modified with toggle publish functionality
 
 import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
-import { useAppContext } from '../../contexts/AppContext';
 import { 
   Edit, Trash2, FileText, ImageIcon, Music, Video, Code, ExternalLink, 
-  Youtube, Instagram, Info, ChevronDown, ChevronUp, Play, Pause, 
+  Eye, EyeOff, Info, ChevronDown, ChevronUp, Play, Pause, 
   Globe, DollarSign, Mail, User, BookmarkPlus, MessageSquare 
 } from 'lucide-react';
 import { getProxiedImageUrl } from '../../services/fileUpload';
-const CreationCard = ({ creation, isAgencyView = false }) => {
-  const { 
-    handleEdit, 
-    handleDelete, 
-    handleUpdateCreation, 
-    currentUser,
-    userType
-  } = useAppContext();
-  
+
+const CreationCard = ({ 
+  creation, 
+  handleEdit, 
+  handleDelete, 
+  handleTogglePublish,
+  isAgencyView = false,
+  handleUpdateCreation, 
+  currentUser 
+}) => {
   const [showMetadata, setShowMetadata] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audio, setAudio] = useState(null);
@@ -58,14 +58,6 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
   // Get icon for creation type
   const getCreationTypeIcon = (type, source) => {
     // If it's from Instagram, use the Instagram icon
-    if (source === 'Instagram') {
-      return <Instagram className="creation-type-icon text-purple-500" />;
-    }
-    
-    // If it's from YouTube, use the YouTube icon
-    if (source === 'YouTube') {
-      return <Youtube className="creation-type-icon text-red-500" />;
-    }
     
     // Otherwise use the normal type icons
     switch (type.toLowerCase()) {
@@ -87,15 +79,6 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
     }
   };
   
-  // Handler for making creation public
-  const handleMakePublic = () => {
-    const updatedCreation = {
-      ...creation,
-      status: 'published'
-    };
-    handleUpdateCreation(updatedCreation);
-  };
-
   // Toggle contact info visibility
   const toggleContactInfo = () => {
     setShowContactInfo(!showContactInfo);
@@ -118,24 +101,30 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
   const renderContentPreview = () => {
     // For images
     if (creation.type === 'Image' || creation.type === 'Photography') {
-    if (creation.fileUrl || creation.thumbnailUrl) {
-      const imageUrl = getProxiedThumbnail(creation.fileUrl || creation.thumbnailUrl);
-      return (
-        <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
-          <img 
-            src={imageUrl} 
-            alt={creation.title} 
-            className="w-full h-full object-cover"
-          />
-        </div>
-      );
+      if (creation.fileUrl || creation.thumbnailUrl) {
+        const imageUrl = currentUser ? 
+          getProxiedThumbnail(creation.fileUrl || creation.thumbnailUrl) : 
+          (creation.fileUrl || creation.thumbnailUrl);
+          
+        return (
+          <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
+            <img 
+              src={imageUrl} 
+              alt={creation.title} 
+              className="w-full h-full object-cover"
+            />
+          </div>
+        );
+      }
     }
-  }
     
     // For videos
     else if (creation.type === 'Video') {
       if (creation.thumbnailUrl) {
-        const thumbnailUrl = getProxiedThumbnail(creation.thumbnailUrl);
+        const thumbnailUrl = currentUser ? 
+          getProxiedThumbnail(creation.thumbnailUrl) : 
+          creation.thumbnailUrl;
+          
         return (
           <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden relative">
             <img 
@@ -177,7 +166,11 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
     }
     
     // Default thumbnail if no specific preview
-    return null;
+    return (
+      <div className="creation-thumbnail w-40 h-28 bg-gray-100 flex items-center justify-center">
+        {getCreationTypeIcon(creation.type)}
+      </div>
+    );
   };
   
   // Format metadata for display
@@ -340,95 +333,66 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
   };
   
   return (
-    <Card className="creation-card">
-      <div className="creation-content">
+    <Card className="creation-card mb-4 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+      <div className="creation-content flex">
         {/* Content Preview */}
         {renderContentPreview()}
         
-        <div className="creation-info-sidebar">
+        <div className="creation-info-sidebar flex flex-col items-center px-3 py-4 border-r border-gray-200 bg-gray-50">
           <div>
             {getCreationTypeIcon(creation.type, creation.source)}
           </div>
-          <div className="creation-meta">
-            <p className="creation-title">{creation.title}</p>
-            <p className="creation-date">{creation.dateCreated}</p>
+          <div className="creation-meta mt-2 text-center">
+            <p className="text-xs uppercase text-gray-500 font-medium">{creation.type}</p>
             
             {/* Status Badge */}
-            <div className="mt-1">
+            <div className="mt-2">
               {creation.status === 'published' ? (
-                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center w-fit">
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full flex items-center justify-center">
                   <Globe className="h-3 w-3 mr-1" />
                   Published
                 </span>
               ) : (
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex items-center w-fit">
+                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full flex items-center justify-center">
+                  <EyeOff className="h-3 w-3 mr-1" />
                   Draft
                 </span>
               )}
             </div>
-            
-            {creation.source === 'YouTube' && creation.sourceUrl && (
-              <a 
-                href={creation.sourceUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs flex items-center text-blue-600 hover:underline mt-1"
-              >
-                <ExternalLink className="w-3 h-3 mr-1" /> View on YouTube
-              </a>
-            )}
-            
-            {creation.type === 'Literature' && creation.sourceUrl && (
-              <a 
-                href={creation.sourceUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs flex items-center text-blue-600 hover:underline mt-1"
-              >
-                <ExternalLink className="w-3 h-3 mr-1" /> View Source
-              </a>
-            )}
-            
-            {hasMetadata && creation.metadata.creationRightsId && (
-              <div className="text-xs text-gray-500 mt-1">
-                ID: {creation.metadata.creationRightsId}
-              </div>
-            )}
           </div>
         </div>
         
-        <div className="creation-details">
+        <div className="creation-details flex-grow p-4">
+          <div className="flex justify-between items-start">
+            <h3 className="text-lg font-medium text-gray-900">{creation.title}</h3>
+            <p className="text-sm text-gray-500">{creation.dateCreated}</p>
+          </div>
+          
           {creation.rights && (
-            <div className="creation-rights">
-              <p className="details-label">Rights</p>
-              <p>{creation.rights}</p>
+            <div className="creation-rights mt-2">
+              <p className="text-xs font-medium text-gray-500">Rights</p>
+              <p className="text-sm text-gray-700">{creation.rights}</p>
             </div>
           )}
           {creation.notes && (
-            <div className="creation-notes">
-              <p className="details-label">Notes</p>
-              <p className="notes-text">{creation.notes}</p>
+            <div className="creation-notes mt-2">
+              <p className="text-xs font-medium text-gray-500">Notes</p>
+              <p className="text-sm text-gray-700 line-clamp-2">{creation.notes}</p>
             </div>
           )}
           {creation.tags && creation.tags.length > 0 && (
-            <div className="creation-tags">
+            <div className="creation-tags mt-3 flex flex-wrap gap-1">
               {creation.tags.map(tag => (
                 <span 
                   key={tag} 
-                  className="tag"
+                  className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded"
                 >
                   {tag}
                 </span>
               ))}
               
-              {creation.source === 'YouTube' && (
-                <span className="tag bg-red-100 text-red-700">
-                  YouTube
-                </span>
-              )}
-              
               {hasMetadata && creation.metadata.category && (
-                <span className="tag bg-purple-100 text-purple-700">
+                <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
                   {creation.metadata.category}
                 </span>
               )}
@@ -444,38 +408,47 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
           {isAgencyView && renderCreatorInfo()}
         </div>
         
-        <div className="creation-actions">
+        <div className="creation-actions flex flex-col gap-2 p-4 border-l border-gray-200">
           {!isAgencyView ? (
             // Creator view actions
             <>
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => handleEdit(creation)}
+                onClick={handleEdit}
                 className="edit-button"
               >
-                <Edit className="button-icon-small" /> Edit
+                <Edit className="h-4 w-4 mr-1" /> Edit
               </Button>
               
-              {/* Make Public button - only show for draft status */}
-              {creation.status !== 'published' && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleMakePublic}
-                  className="publish-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
-                >
-                  <Globe className="button-icon-small" /> Make Public
-                </Button>
-              )}
+              {/* Toggle Publish Status button */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleTogglePublish}
+                className={creation.status === 'published' 
+                  ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-800"
+                  : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+                }
+              >
+                {creation.status === 'published' ? (
+                  <>
+                    <EyeOff className="h-4 w-4 mr-1" /> Unpublish
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-4 w-4 mr-1" /> Publish
+                  </>
+                )}
+              </Button>
               
               <Button 
                 variant="destructive" 
                 size="sm" 
-                onClick={() => handleDelete(creation.id)}
+                onClick={handleDelete}
                 className="delete-button"
               >
-                <Trash2 className="button-icon-small" /> Delete
+                <Trash2 className="h-4 w-4 mr-1" /> Delete
               </Button>
             </>
           ) : (
@@ -487,7 +460,7 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
                   size="sm"
                   className="license-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
                 >
-                  <DollarSign className="button-icon-small" /> License (${creation.licensingCost})
+                  <DollarSign className="h-4 w-4 mr-1" /> License (${creation.licensingCost})
                 </Button>
               ) : (
                 <Button 
@@ -496,7 +469,7 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
                   className="contact-button"
                   onClick={toggleContactInfo}
                 >
-                  <Mail className="button-icon-small" /> Contact Creator
+                  <Mail className="h-4 w-4 mr-1" /> Contact Creator
                 </Button>
               )}
               
@@ -505,7 +478,7 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
                 size="sm"
                 className="bookmark-button"
               >
-                <BookmarkPlus className="button-icon-small" /> Save
+                <BookmarkPlus className="h-4 w-4 mr-1" /> Save
               </Button>
               
               <Button 
@@ -513,7 +486,7 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
                 size="sm"
                 className="message-button"
               >
-                <MessageSquare className="button-icon-small" /> Send Message
+                <MessageSquare className="h-4 w-4 mr-1" /> Message
               </Button>
             </>
           )}
@@ -525,7 +498,7 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
               onClick={() => window.open(creation.sourceUrl, '_blank')}
               className="view-button"
             >
-              <ExternalLink className="button-icon-small" /> View
+              <ExternalLink className="h-4 w-4 mr-1" /> View
             </Button>
           )}
           
@@ -536,25 +509,14 @@ const CreationCard = ({ creation, isAgencyView = false }) => {
               onClick={() => setShowMetadata(!showMetadata)}
               className="metadata-button"
             >
-              <Info className="button-icon-small" />
-              {showMetadata ? (
-                <>
-                  <span className="mr-1">Hide Metadata</span>
-                  <ChevronUp className="h-3 w-3" />
-                </>
-              ) : (
-                <>
-                  <span className="mr-1">Show Metadata</span>
-                  <ChevronDown className="h-3 w-3" />
-                </>
-              )}
+              <Info className="h-4 w-4 mr-1" />
+              {showMetadata ? "Hide Details" : "Show Details"}
             </Button>
           )}
         </div>
-        </div>
-        </Card>
-      );
-    };
-      
+      </div>
+    </Card>
+  );
+};
 
-    export default CreationCard
+export default CreationCard;

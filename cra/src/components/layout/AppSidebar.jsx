@@ -1,4 +1,4 @@
-// src/components/layout/AppSidebar.jsx
+// src/components/layout/AppSidebar.jsx - Updated to handle My Creations
 
 import React, { useState, useEffect } from 'react';
 import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram } from 'lucide-react';
@@ -56,7 +56,7 @@ const AppSidebar = () => {
     const interval = setInterval(fetchUnreadCount, 30000); // Check every 30 seconds
     
     return () => clearInterval(interval);
-  }, [currentUser]);
+  }, [currentUser, API_URL]);
   
   return (
     <>
@@ -140,8 +140,6 @@ const AppSidebar = () => {
                 Messages
               </button>
             </div>
-            
-            
             
             {isAgency && (
               <div>

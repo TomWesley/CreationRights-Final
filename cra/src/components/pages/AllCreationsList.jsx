@@ -8,50 +8,85 @@ import { Input } from '../ui/input';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import CreationCard from '../shared/CreationCard';
 import { useAppContext } from '../../contexts/AppContext';
+import mockCreations from '../../data/mockCreations'; // Import mockCreations directly
 
 const AllCreationsList = () => {
   const { 
-    creations, 
-    searchQuery, 
-    setSearchQuery,
     activeTab,
     setActiveTab,
     isLoading,
-    setIsLoading
+    setIsLoading,
+    currentUser
   } = useAppContext();
   
-  // State for filtering and sorting
+  // Local state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [creations, setCreations] = useState([]);
   const [filteredCreations, setFilteredCreations] = useState([]);
+  
+  // Sorting and filtering state
   const [sortField, setSortField] = useState('dateCreated');
   const [sortDirection, setSortDirection] = useState('desc');
   const [creatorFilter, setCreatorFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Find all published creations (with status === 'published')
+  // Load mock data on component mount
   useEffect(() => {
-    // Filter creations based on published status
+    setIsLoading(true);
+    
+    try {
+      // Check localStorage for any saved changes to the mock data
+      const savedCreations = localStorage.getItem('mockCreations');
+      
+      if (savedCreations) {
+        setCreations(JSON.parse(savedCreations));
+      } else {
+        // Use the imported mock data
+        setCreations(mockCreations);
+        localStorage.setItem('mockCreations', JSON.stringify(mockCreations));
+      }
+    } catch (error) {
+      console.error('Error loading mock data:', error);
+      // Fallback to imported mock data
+      setCreations(mockCreations);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setIsLoading]);
+  
+  // Filter and sort creations
+  useEffect(() => {
+    if (!Array.isArray(creations)) {
+      console.error('Creations is not an array:', creations);
+      setFilteredCreations([]);
+      return;
+    }
+    
+    // Filter published creations only
     let filtered = creations.filter(creation => creation.status === 'published');
     
-    // Apply type filter if active tab is not 'all'
+    // Filter by type (tab)
     if (activeTab !== 'all') {
       filtered = filtered.filter(creation => 
-        creation.type.toLowerCase() === activeTab
+        creation.type && creation.type.toLowerCase() === activeTab.toLowerCase()
       );
     }
     
-    // Apply search query filter
+    // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(creation => 
-        creation.title.toLowerCase().includes(query) ||
+        (creation.title && creation.title.toLowerCase().includes(query)) ||
         (creation.notes && creation.notes.toLowerCase().includes(query)) ||
         (creation.rights && creation.rights.toLowerCase().includes(query)) ||
-        (creation.tags && creation.tags.some(tag => tag.toLowerCase().includes(query)))
+        (creation.tags && Array.isArray(creation.tags) && creation.tags.some(tag => 
+          tag && tag.toLowerCase().includes(query)
+        ))
       );
     }
     
-    // Apply creator filter
+    // Filter by creator
     if (creatorFilter) {
       filtered = filtered.filter(creation => 
         (creation.createdBy && creation.createdBy.toLowerCase().includes(creatorFilter.toLowerCase())) ||
@@ -60,11 +95,11 @@ const AllCreationsList = () => {
       );
     }
     
-    // Apply tag filter
+    // Filter by tag
     if (tagFilter) {
       filtered = filtered.filter(creation => 
-        creation.tags && creation.tags.some(tag => 
-          tag.toLowerCase().includes(tagFilter.toLowerCase())
+        creation.tags && Array.isArray(creation.tags) && creation.tags.some(tag => 
+          tag && tag.toLowerCase().includes(tagFilter.toLowerCase())
         )
       );
     }
@@ -109,6 +144,13 @@ const AllCreationsList = () => {
       setSortField(field);
       setSortDirection('desc');
     }
+  };
+  
+  // Reset mock data for testing
+  const resetMockData = () => {
+    setCreations(mockCreations);
+    localStorage.setItem('mockCreations', JSON.stringify(mockCreations));
+    console.log("Mock data reset to original state");
   };
   
   return (
@@ -229,6 +271,7 @@ const AllCreationsList = () => {
               <TabsTrigger value="text">Text</TabsTrigger>
               <TabsTrigger value="music">Music</TabsTrigger>
               <TabsTrigger value="video">Video</TabsTrigger>
+              <TabsTrigger value="software">Software</TabsTrigger>
             </TabsList>
           </Tabs>
         </CardHeader>
@@ -247,6 +290,16 @@ const AllCreationsList = () => {
                   ? 'Try adjusting your search or filters' 
                   : 'No published creations available at this time'}
               </p>
+              
+              {/* Debug button - you can remove this in production */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetMockData}
+                className="mt-4"
+              >
+                Reset Demo Data
+              </Button>
             </div>
           ) : (
             <div className="creation-list">
@@ -254,7 +307,8 @@ const AllCreationsList = () => {
                 <CreationCard 
                   key={creation.id} 
                   creation={creation} 
-                  isAgencyView={true} 
+                  isAgencyView={true}
+                  currentUser={currentUser}
                 />
               ))}
             </div>

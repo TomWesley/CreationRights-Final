@@ -626,27 +626,6 @@ export const saveSocialProfiles = async (userEmail, socialProfiles) => {
  * @param {number} initialDelay - Initial delay in ms
  * @returns {Promise<any>} - Promise with result
  */
-const  = async (fn, maxRetries = 3, initialDelay = 300) => {
-  let retries = 0;
-  let delay = initialDelay;
-  
-  while (true) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (retries >= maxRetries) throw error;
-      
-      console.log(`Retry ${retries + 1}/${maxRetries} after ${delay}ms`);
-      
-      // Wait for the delay
-      await new Promise(resolve => setTimeout(resolve, delay));
-      
-      // Increase delay with some randomness for next attempt
-      delay = delay * 2 * (0.8 + Math.random() * 0.4);
-      retries++;
-    }
-  }
-};
 
 /**
  * Check if a user has the necessary folder structure and create if missing

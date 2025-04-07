@@ -163,22 +163,7 @@ app.get('/api/instagram/:username', async (req, res) => {
 });
 
 // Add Instagram post conversion endpoint
-app.post('/api/instagram/convert', async (req, res) => {
-  try {
-    const { posts, userId } = req.body;
-    
-    if (!posts || !Array.isArray(posts)) {
-      return res.status(400).json({ error: 'Posts are required and must be an array' });
-    }
-    
-    const creations = posts.map(post => instagramService.convertPostToCreation(post));
-    
-    res.status(200).json(creations);
-  } catch (error) {
-    console.error('Error converting Instagram posts:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 // Add this to server/index.js
 
@@ -510,96 +495,6 @@ app.get('/api/users/:userId/folders', async (req, res) => {
 });
 
 // Creations endpoints
-app.post('/api/users/:userId/creations', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const creations = req.body;
-    
-    if (!Array.isArray(creations)) {
-      return res.status(400).json({ 
-        error: 'Invalid data format',
-        message: 'Creations must be an array'
-      });
-    }
-    
-    console.log(`Saving ${creations.length} creations for user ${userId}...`);
-    
-    // Ensure the user has proper folder structure
-    await ensureUserFolderStructure(userId);
-    
-    // Add detailed logging to see what's happening
-    const bucket = storage.bucket(BUCKET_NAME);
-    const metadataPath = `users/${userId}/creations/metadata/all.json`;
-    
-    // Check if file exists before saving
-    const [exists] = await bucket.file(metadataPath).exists();
-    console.log(`Metadata file exists: ${exists}`);
-    
-    if (exists) {
-      console.log(`Updating existing metadata file at ${metadataPath}`);
-    } else {
-      console.log(`Creating new metadata file at ${metadataPath}`);
-    }
-    
-    // Save the creations array with pretty formatting for easier debugging
-    await bucket.file(metadataPath).save(
-      JSON.stringify(creations, null, 2), // Use pretty formatting
-      {
-        contentType: 'application/json',
-        metadata: {
-          contentType: 'application/json',
-          cacheControl: 'no-cache, max-age=0'
-        }
-      }
-    );
-    
-    console.log(`Successfully saved ${creations.length} creations to ${metadataPath}`);
-    
-    // Additionally, create individual metadata files for each creation
-    // This can be useful for granular access and backup purposes
-    for (const creation of creations) {
-      if (!creation.id) {
-        console.warn('Creation missing ID, skipping individual metadata file');
-        continue;
-      }
-      
-      const creationId = creation.id;
-      // Extract a creation rights ID if it exists in the metadata
-      const creationRightsId = creation.metadata?.creationRightsId || 
-                              creationId.startsWith('CR-') ? creationId : null;
-                              
-      if (creationRightsId) {
-        const individualMetadataPath = 
-          `users/${userId}/creations/assets/${creationRightsId}/metadata.json`;
-        
-        console.log(`Saving individual metadata for creation ${creationId} at ${individualMetadataPath}`);
-        
-        try {
-          await bucket.file(individualMetadataPath).save(
-            JSON.stringify(creation, null, 2),
-            { contentType: 'application/json' }
-          );
-        } catch (metadataError) {
-          console.error(`Error saving individual metadata for creation ${creationId}:`, metadataError);
-          // Continue with the main operation even if this fails
-        }
-      }
-    }
-    
-    res.status(200).json({
-      success: true,
-      message: `Saved ${creations.length} creations successfully`,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error saving creations:', error);
-    res.status(500).json({ 
-      error: 'Failed to save creations',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
 
 // Updated loadCreations function for server/index.js
 app.get('/api/users/:userId/creations', async (req, res) => {

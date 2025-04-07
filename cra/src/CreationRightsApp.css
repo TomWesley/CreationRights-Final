@@ -416,7 +416,7 @@
     color: white;
     box-shadow: var(--shadow-md);
     position: fixed;
-    inset-y: 0;
+
     left: 0;
     z-index: 10;
     padding-top: 4rem;
@@ -833,7 +833,7 @@
   .notes-text {
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    
     -webkit-box-orient: vertical;
   }
   

@@ -9,20 +9,17 @@ import AgencyDashboard from './components/pages/AgencyDashboard';
 import CreationsList from './components/pages/CreationsList';
 import AllCreationsList from './components/pages/AllCreationsList';
 import ArtistsList from './components/pages/ArtistsList';
-import CreationForm from './components/pages/CreationForm';
 import CreatorManagement from './components/pages/CreatorManagement';
 import Settings from './components/pages/Settings';
 import NewFolderModal from './components/shared/NewFolderModal';
 import LoadingIndicator from './components/shared/LoadingIndicator';
 import YouTubeImport from './components/pages/YouTubeImport';
-import FileUploadPage from './components/pages/FileUploadPage';
-import MetadataCompletionPage from './components/pages/MetadataCompletionPage';
-import MetadataEditPage from './components/pages/MetadataEditPage';
+
 import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
 import SocialMediaPage from './components/pages/SocialMediaPage';
 import './CreationRightsApp.css';
-import InstagramImport from './components/pages/InstagramImport';
+
 import ChatPage from './components/pages/ChatPage';
 import Footer from './components/layout/Footer';
 
@@ -52,21 +49,8 @@ const AppContent = () => {
         return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
       
       // Creator-specific views
-      case 'myCreations':
-        return <CreationsList />;
-      case 'newCreation':
-        return <CreationForm />;
-      case 'editCreation':
-        return <MetadataEditPage />;
       case 'youtubeImport':
         return <YouTubeImport />;
-      case 'instagramImport':
-        return <InstagramImport />;
-      case 'fileUpload':
-        return <FileUploadPage />;
-      case 'metadataCompletion':
-        return <MetadataCompletionPage />;
-        
       // Social Media page - available for all user types
       case 'socialMedia':
         return <SocialMediaPage />;

@@ -19,6 +19,7 @@ import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
 import SocialMediaPage from './components/pages/SocialMediaPage';
 import './CreationRightsApp.css';
+import LicensesPage from './components/pages/LicensesPage';
 
 import ChatPage from './components/pages/ChatPage';
 import Footer from './components/layout/Footer';
@@ -57,6 +58,10 @@ const AppContent = () => {
       // Social Media page - available for all user types
       case 'socialMedia':
         return <SocialMediaPage />;
+
+        // Add the licenses case
+      case 'licenses':
+        return <LicensesPage />;
         
       // Agency-specific views
       case 'allCreations':

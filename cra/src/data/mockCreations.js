@@ -139,7 +139,7 @@ const mockCreations = [
       dateCreated: "2023-12-20",
       rights: "Licensed under Creative Commons Attribution-NonCommercial 4.0",
       notes: "Recorded at dawn on Cannon Beach, Oregon. Minimal processing applied.",
-      licensingCost: "89.99",
+      licensingCost: "0.51",
       tags: ["ambient", "nature", "ocean", "waves", "soundscape", "relaxation"],
       fileSize: "62.3 MB",
       fileType: "audio/flac",

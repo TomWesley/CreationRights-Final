@@ -1,7 +1,7 @@
 // src/components/layout/AppSidebar.jsx - Updated to handle My Creations
 
 import React, { useState, useEffect } from 'react';
-import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram } from 'lucide-react';
+import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram, DollarSign } from 'lucide-react';
 import FolderStructure from '../shared/FolderStructure';
 import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
@@ -110,7 +110,18 @@ const AppSidebar = () => {
                 Social Media
               </button>
             </div>
-            
+            <div>
+  <button
+    className={`nav-item ${activeView === 'licenses' ? 'nav-active' : ''}`}
+    onClick={() => {
+      setActiveView('licenses');
+      setIsMobileMenuOpen(false);
+    }}
+  >
+    <DollarSign className="nav-icon" />
+    {userType === 'creator' ? 'Licenses Sold' : 'Licenses'}
+  </button>
+</div>
             <div>
               <button
                 className={`nav-item ${activeView === 'team' ? 'nav-active' : ''}`}

@@ -1,4 +1,4 @@
-// src/components/shared/CreationCard.jsx - Modified with toggle publish functionality
+// src/components/shared/CreationCard.jsx - Modified with toggle publish and Stripe payment functionality
 
 import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/card';
@@ -9,6 +9,7 @@ import {
   Globe, DollarSign, Mail, User, BookmarkPlus, MessageSquare 
 } from 'lucide-react';
 import { getProxiedImageUrl } from '../../services/fileUpload';
+import StripePaymentModal from './StripePaymentModal';
 
 const CreationCard = ({ 
   creation, 
@@ -24,6 +25,7 @@ const CreationCard = ({
   const [audio, setAudio] = useState(null);
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [showCreatorInfo, setShowCreatorInfo] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Initialize audio player if it's an audio file
   useEffect(() => {
@@ -459,6 +461,7 @@ const CreationCard = ({
                   variant="outline" 
                   size="sm"
                   className="license-button bg-green-50 text-green-700 border-green-200 hover:bg-green-100 hover:text-green-800"
+                  onClick={() => setShowPaymentModal(true)}
                 >
                   <DollarSign className="h-4 w-4 mr-1" /> License (${creation.licensingCost})
                 </Button>
@@ -515,6 +518,21 @@ const CreationCard = ({
           )}
         </div>
       </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && (
+        <StripePaymentModal
+          isOpen={showPaymentModal}
+          onClose={(success, paymentIntent) => {
+            setShowPaymentModal(false);
+            if (success) {
+              // Show a success notification or update the UI
+              console.log('License purchased successfully', paymentIntent);
+            }
+          }}
+          creation={creation}
+        />
+      )}
     </Card>
   );
 };

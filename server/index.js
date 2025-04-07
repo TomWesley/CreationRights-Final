@@ -10,6 +10,7 @@ const multer = require('multer');
 const fs = require('fs');
 const instagramService = require('./services/instagramService');
 const uploadHandler = require('./routes/uploadHandler');
+const stripeRoutes = require('./routes/stripeRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -33,6 +34,7 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use('/api/users', uploadHandler);
+app.use('/api', stripeRoutes);
 
 // Add explicit handler for OPTIONS requests
 app.options('*', cors(corsOptions));

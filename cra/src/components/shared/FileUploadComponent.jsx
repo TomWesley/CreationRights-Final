@@ -203,23 +203,57 @@ const FileUploadComponent = ({ onFileProcessed }) => {
       
       // Upload the file to the server if the user is authenticated
       let uploadedFileInfo = null;
-      if (currentUser && currentUser.email) {
-        try {
-          console.log('Uploading file to server with creationRightsId:', creationRightsId);
-          console.log('User email:', currentUser.email);
-          setUploadProgress(10); // Show some initial progress
-          
-          // Perform the upload with explicit POST method
-          const uploadResult = await uploadFile(currentUser.email, selectedFile, creationRightsId);
-          uploadedFileInfo = uploadResult.file;
-          console.log('Upload result:', uploadedFileInfo);
-          setUploadProgress(100);
-        } catch (uploadError) {
-          console.error('Error uploading file:', uploadError);
-          setError(`Upload failed: ${uploadError.message}`);
-          // Continue with local file handling if upload fails
+    if (currentUser && currentUser.email) {
+      try {
+        console.log('Uploading file to server with creationRightsId:', creationRightsId);
+        console.log('User email:', currentUser.email);
+        setUploadProgress(10); // Show some initial progress
+        
+        // Perform the upload with retries
+        const uploadResult = await retryWithBackoff(
+          async () => uploadFile(currentUser.email, selectedFile, creationRightsId),
+          3,  // max retries
+          1000 // initial delay in ms
+        );
+        
+        if (!uploadResult || !uploadResult.file) {
+          throw new Error('Upload failed - no file info returned');
         }
+        
+        uploadedFileInfo = uploadResult.file;
+        console.log('Upload result:', uploadedFileInfo);
+        setUploadProgress(100);
+        
+        // Verify the uploaded file exists in the bucket
+        try {
+          console.log('Verifying file in storage...');
+          const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+          const sanitizedUserId = currentUser.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          
+          const verifyResponse = await fetch(
+            `${API_URL}/api/files/check/${sanitizedUserId}/${creationRightsId}`
+          );
+          
+          if (verifyResponse.ok) {
+            const verifyResult = await verifyResponse.json();
+            console.log('File verification result:', verifyResult);
+            
+            if (verifyResult.fileCount === 0) {
+              console.warn('Warning: File was uploaded but not found in verification');
+            } else {
+              console.log(`Verification successful: ${verifyResult.fileCount} files found`);
+            }
+          }
+        } catch (verifyError) {
+          console.error('Error verifying file:', verifyError);
+          // Continue even if verification fails
+        }
+      } catch (uploadError) {
+        console.error('Error uploading file:', uploadError);
+        setError(`Upload failed: ${uploadError.message}`);
+        // If upload fails, we can still continue with the local file preview
       }
+    }
       
       // Create creation object with file data
       const creationData = {

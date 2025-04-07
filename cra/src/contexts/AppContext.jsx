@@ -73,6 +73,7 @@ export const AppProvider = ({ children }) => {
       localStorage.setItem('activeView', activeView);
     }
   }, [activeView, isAuthenticated]);
+  
 
   // Load authentication state from localStorage
   useEffect(() => {
@@ -443,151 +444,73 @@ export const AppProvider = ({ children }) => {
   };
 
   // Unified handleSubmit function that handles metadata
-  const handleSubmit = (creation, metadata) => {
+  const handleSubmit = async (creation, metadata) => {
     setIsLoading(true);
+    console.log('Handling creation submission:', { creation, metadata });
     
     try {
-      // Handle case where creation is event (from form submit)
-      if (creation && creation.preventDefault) {
-        creation.preventDefault();
+      // Format licensing cost if provided
+      const licensingCost = creation.licensingCost ? parseFloat(creation.licensingCost) : null;
+      
+      // Make sure we have a creation ID - generate one if needed
+      const creationId = creation.id || `c${Date.now()}`;
+      
+      // Make sure we have proper metadata
+      const creationWithMetadata = {
+        ...creation,
+        id: creationId,
+        licensingCost,
+        metadata: metadata || creation.metadata || {},
+        dateCreated: creation.dateCreated || new Date().toISOString().split('T')[0],
+        folderId: creation.folderId || (currentFolder ? currentFolder.id : ''),
+        createdBy: currentUser.email,
+        createdAt: new Date().toISOString(),
         
-        // Using currentCreation state with its existing metadata
-        if (!currentCreation.title || !currentCreation.type) {
-          alert('Title and type are required fields');
-          setIsLoading(false);
-          return;
-        }
-        
-        let updatedCreations;
-        
-        if (editMode) {
-          // Update existing creation
-          updatedCreations = creations.map(c => 
-            c.id === currentCreation.id ? {
-              ...currentCreation,
-              // Ensure metadata is preserved
-              metadata: currentCreation.metadata || {},
-              // Format licensingCost as number if provided, or null if empty
-              licensingCost: currentCreation.licensingCost ? parseFloat(currentCreation.licensingCost) : null,
-              // Remove the temporary _fileObject if it exists
-              _fileObject: undefined 
-            } : c
-          );
-        } else {
-          // Add new creation with unique ID
-          const newCreation = {
-            ...currentCreation,
-            id: `c${Date.now()}`,
-            dateCreated: currentCreation.dateCreated || new Date().toISOString().split('T')[0],
-            folderId: currentCreation.folderId || (currentFolder ? currentFolder.id : ''),
-            // Format licensingCost as number if provided, or null if empty
-            licensingCost: currentCreation.licensingCost ? parseFloat(currentCreation.licensingCost) : null,
-            // Add status field with default 'draft'
-            status: 'draft',
-            // IMPORTANT: Ensure metadata is explicitly preserved here
-            metadata: currentCreation.metadata || {},
-            // Add user identifier to the creation
-            createdBy: currentUser.email,
-            createdAt: new Date().toISOString()
-          };
-          
-          // If the creation has a file object, handle it
-          if (newCreation._fileObject) {
-            const persistentUrl = URL.createObjectURL(newCreation._fileObject);
-            newCreation.fileUrl = persistentUrl;
-            delete newCreation._fileObject;
-          }
-          
-          console.log('Adding new creation with metadata:', JSON.stringify(newCreation.metadata));
-          updatedCreations = [...creations, newCreation];
-        }
-        
-        // Update state
-        setCreations(updatedCreations);
-        
-        // Explicitly save to the server
-        if (currentUser && currentUser.email) {
-          saveCreations(currentUser.email, updatedCreations)
-            .then(() => {
-              console.log('Successfully saved creations to server');
-              resetForm();
-              setActiveView('myCreations');
-            })
-            .catch(err => {
-              console.error('Error saving creations:', err);
-              alert('Error saving to server. Please try again.');
-            });
-        } else {
-          resetForm();
-          setActiveView('myCreations');
-        }
-      } 
-      // Handle case where creation and metadata are passed explicitly
-      else {
-        // Ensure creation has all required fields
-        if (!creation || !creation.title || !creation.type) {
-          alert('Title and type are required fields');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Format licensing cost if provided
-        const licensingCost = creation.licensingCost ? parseFloat(creation.licensingCost) : null;
-        
-        console.log('handleSubmit called with creation:', JSON.stringify(creation));
-        console.log('Metadata received:', JSON.stringify(metadata));
-        
-        // Create a new creation object with metadata
-        const creationWithMetadata = {
-          ...creation,
-          licensingCost,
-          metadata: metadata || creation.metadata || {},
-          id: creation.id || `c${Date.now()}`,
-          dateCreated: creation.dateCreated || new Date().toISOString().split('T')[0],
-          folderId: creation.folderId || (currentFolder ? currentFolder.id : ''),
-          createdBy: currentUser.email,
-          createdAt: new Date().toISOString()
-        };
-        
-        console.log('Submitting creation with metadata:', JSON.stringify(creationWithMetadata));
-        
-        let updatedCreations;
-        
-        if (editMode) {
-          // Update existing creation
-          updatedCreations = creations.map(c => 
-            c.id === creationWithMetadata.id ? creationWithMetadata : c
-          );
-        } else {
-          // Add new creation
-          updatedCreations = [...creations, creationWithMetadata];
-        }
-        
-        // Update state
-        setCreations(updatedCreations);
-        
-        // Explicitly save to the server
-        if (currentUser && currentUser.email) {
-          saveCreations(currentUser.email, updatedCreations)
-            .then(() => {
-              console.log('Successfully saved creations with metadata');
-              resetForm();
-              setActiveView('myCreations');
-            })
-            .catch(err => {
-              console.error('Error saving creations:', err);
-              alert('Error saving your creation. Please try again.');
-            });
-        } else {
-          resetForm();
-          setActiveView('myCreations');
-        }
+        // Default status to draft if not specified
+        status: creation.status || 'draft'
+      };
+      
+      console.log('Prepared creation with metadata:', creationWithMetadata);
+      
+      // First, fetch existing creations to ensure we're not losing any
+      let existingCreations = [];
+      
+      try {
+        console.log('Fetching existing creations');
+        existingCreations = await loadCreations(currentUser.email);
+        console.log(`Loaded ${existingCreations.length} existing creations`);
+      } catch (loadError) {
+        console.error('Error loading existing creations:', loadError);
+        existingCreations = [...creations]; // Fallback to local state
       }
+      
+      let updatedCreations;
+      
+      if (editMode) {
+        console.log(`Updating existing creation: ${creationId}`);
+        // Update existing creation
+        updatedCreations = existingCreations.map(c => 
+          c.id === creationId ? creationWithMetadata : c
+        );
+      } else {
+        console.log(`Adding new creation: ${creationId}`);
+        // Add new creation
+        updatedCreations = [...existingCreations, creationWithMetadata];
+      }
+      
+      // Update local state immediately for better UX
+      setCreations(updatedCreations);
+      
+      
+      // Reset form and navigate
+      resetForm();
+      setActiveView('myCreations');
+      return true;
     } catch (error) {
       console.error('Error saving creation:', error);
       alert('Error saving your creation. Please try again.');
-    } finally {
       setIsLoading(false);
+      return false;
     }
   };
 
@@ -603,6 +526,83 @@ export const AppProvider = ({ children }) => {
     setCurrentCreation(creation);
     setEditMode(true);
     setActiveView('editCreation');
+  };
+
+
+  
+  // Add this debug function to help trace the creation lifecycle in AppContext.jsx
+  const debugCreation = (operation, creation) => {
+    const debugInfo = {
+      operation,
+      id: creation.id,
+      title: creation.title,
+      type: creation.type,
+      hasMetadata: !!creation.metadata,
+      creationRightsId: creation.metadata?.creationRightsId || 'none',
+      fileUrl: creation.fileUrl || creation.gcsUrl || 'none',
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`[CreationDebug] ${operation}:`, debugInfo);
+  };
+  
+  // Add a function to verify creations data consistency in AppContext.jsx
+  const verifyCreationsConsistency = async () => {
+    if (!currentUser?.email) return;
+    
+    try {
+      console.log('Verifying creations data consistency...');
+      
+      // Fetch creations from server
+      const serverCreations = await loadCreations(currentUser.email);
+      
+      // Compare with local state
+      const localCreationsCount = creations.length;
+      const serverCreationsCount = serverCreations.length;
+      
+      console.log(`Local creations: ${localCreationsCount}, Server creations: ${serverCreationsCount}`);
+      
+      if (localCreationsCount !== serverCreationsCount) {
+        console.warn('Creations count mismatch! Synchronizing from server...');
+        setCreations(serverCreations);
+      } else {
+        // Check for metadata consistency
+        let inconsistencies = 0;
+        
+        for (const localCreation of creations) {
+          const serverCreation = serverCreations.find(c => c.id === localCreation.id);
+          if (!serverCreation) {
+            console.warn(`Creation ${localCreation.id} exists locally but not on server`);
+            inconsistencies++;
+            continue;
+          }
+          
+          // Check for essential fields
+          if (!localCreation.metadata && serverCreation.metadata) {
+            console.warn(`Creation ${localCreation.id} has metadata on server but not locally`);
+            inconsistencies++;
+          } else if (localCreation.metadata && !serverCreation.metadata) {
+            console.warn(`Creation ${localCreation.id} has metadata locally but not on server`);
+            inconsistencies++;
+          }
+          
+          // Check file URLs
+          if (localCreation.fileUrl !== serverCreation.fileUrl) {
+            console.warn(`Creation ${localCreation.id} has different fileUrl`);
+            inconsistencies++;
+          }
+        }
+        
+        if (inconsistencies > 0) {
+          console.warn(`Found ${inconsistencies} inconsistencies. Synchronizing from server...`);
+          setCreations(serverCreations);
+        } else {
+          console.log('Creations are consistent between client and server');
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying creations consistency:', error);
+    }
   };
 
   const handleDelete = (id) => {

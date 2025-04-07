@@ -13,9 +13,11 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
     const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
     
     console.log(`Uploading file to ${API_URL}/api/users/${sanitizedUserId}/upload`);
-    console.log(`User ID: ${userId} -> sanitized: ${sanitizedUserId}`);
-    console.log(`File: ${file.name}, size: ${file.size}, type: ${file.type}`);
-    if (creationRightsId) console.log(`Creation Rights ID: ${creationRightsId}`);
+    console.log(`File details: name=${file.name}, size=${file.size}, type=${file.type}`);
+    
+    if (creationRightsId) {
+      console.log(`Using creationRightsId: ${creationRightsId}`);
+    }
     
     // Create form data
     const formData = new FormData();
@@ -26,34 +28,55 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
       formData.append('creationRightsId', creationRightsId);
     }
     
-    // Send request - notice the path is now /api/users/...
-    const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/upload`, {
-      method: 'POST',  // Make sure we're explicitly using POST
+    // Add a timestamp to prevent caching issues
+    formData.append('timestamp', Date.now().toString());
+    
+    // Send request with explicit POST method and retry logic
+    console.log('Sending upload request...');
+    
+    // Use a timeout promise to handle network issues
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Upload request timeout')), 30000); // 30 second timeout
+    });
+    
+    const fetchPromise = fetch(`${API_URL}/api/users/${sanitizedUserId}/upload`, {
+      method: 'POST',
       body: formData,
       // Do not set Content-Type header - browser will set it with boundary for FormData
     });
     
+    // Race the fetch against the timeout
+    const response = await Promise.race([fetchPromise, timeoutPromise]);
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Upload failed with status ${response.status}. Response:`, errorText);
+      // Try to get the error response
+      let errorMessage = `Upload failed with status ${response.status}`;
       
-      let errorData;
       try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        // If response is not JSON, use the text directly
-        errorData = { error: errorText };
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch (parseError) {
+        // If JSON parsing fails, try to get the text
+        try {
+          const errorText = await response.text();
+          if (errorText) errorMessage += `: ${errorText}`;
+        } catch (textError) {
+          // Ignore if we can't get the text
+        }
       }
       
-      throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+      throw new Error(errorMessage);
     }
     
-    return await response.json();
+    const result = await response.json();
+    console.log('Upload completed successfully:', result);
+    return result;
   } catch (error) {
     console.error('Error uploading file:', error);
     throw error;
   }
 };
+
 
 /**
  * Get file preview URL (local or from server)

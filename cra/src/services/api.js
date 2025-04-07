@@ -164,17 +164,65 @@ export const loadFolders = async (email) => {
 // Creations operations
 export const saveCreations = async (email, creations) => {
   try {
+    if (!email) throw new Error('Email is required');
+    if (!Array.isArray(creations)) throw new Error('Creations must be an array');
+    
     const sanitizedEmail = sanitizeEmail(email);
     console.log(`Saving ${creations.length} creations for ${sanitizedEmail}`);
-    await fetchAPI(`/users/${sanitizedEmail}/creations`, {
-      method: 'POST',
-      body: JSON.stringify(creations)
+    
+    // Ensure creations are proper JSON before saving
+    const creationsToSave = creations.map(creation => {
+      // Remove any circular references or non-serializable objects
+      return {
+        ...creation,
+        // Remove any temporary file objects that might be present
+        _fileObject: undefined,
+        // Ensure proper serialization of dates
+        createdAt: creation.createdAt || new Date().toISOString(),
+        dateCreated: creation.dateCreated || new Date().toISOString().split('T')[0],
+        // Convert FileList objects to arrays if present
+        files: creation.files instanceof FileList ? Array.from(creation.files) : creation.files
+      };
     });
     
+    // Ensure creations are sorted by ID for consistency
+    creationsToSave.sort((a, b) => (a.id > b.id ? 1 : -1));
+    
+    // First, check if the path exists
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    
+    console.log(`POST ${API_URL}/users/${sanitizedEmail}/creations`);
+    
+    // Make the request with proper error handling
+    const response = await fetch(`${API_URL}/users/${sanitizedEmail}/creations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(creationsToSave),
+    });
+    
+    // If not successful, provide detailed error info
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error response (${response.status}):`, errorText);
+      
+      let errorDetail;
+      try {
+        errorDetail = JSON.parse(errorText);
+      } catch (e) {
+        errorDetail = { message: errorText };
+      }
+      
+      throw new Error(`Failed to save creations: ${response.status} - ${errorDetail.message || errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('Save creations response:', result);
     return true;
   } catch (error) {
     console.error('Error saving creations:', error);
-    return false;
+    throw error;
   }
 };
 
@@ -578,7 +626,7 @@ export const saveSocialProfiles = async (userEmail, socialProfiles) => {
  * @param {number} initialDelay - Initial delay in ms
  * @returns {Promise<any>} - Promise with result
  */
-const retryWithBackoff = async (fn, maxRetries = 3, initialDelay = 300) => {
+const  = async (fn, maxRetries = 3, initialDelay = 300) => {
   let retries = 0;
   let delay = initialDelay;
   

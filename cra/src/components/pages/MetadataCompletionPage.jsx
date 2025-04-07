@@ -55,8 +55,16 @@ const MetadataCompletionPage = () => {
     // Log metadata for debugging
     console.log('Metadata from form:', JSON.stringify(metadata));
     
-    // Use the new function that directly handles metadata
-    handleSubmit(currentCreation, metadata);
+    // Combine current creation with the new metadata
+    const updatedCreation = {
+      ...currentCreation,
+      metadata: metadata || {},
+    };
+    
+    console.log('Final creation with metadata:', updatedCreation);
+    
+    // Save to the creations array via the context's handleSubmit
+    handleSubmit(updatedCreation);
     
     // Show success state
     setStep('success');

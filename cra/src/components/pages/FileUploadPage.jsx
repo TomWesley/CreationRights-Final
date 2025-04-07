@@ -1,4 +1,4 @@
-// src/components/pages/FileUploadPage.jsx
+// src/components/pages/EnhancedFileUploadPage.jsx - Simplified version
 
 import React, { useState, useRef } from 'react';
 import { ArrowLeft, Upload, Check, X, AlertCircle, DollarSign, Info } from 'lucide-react';
@@ -8,12 +8,6 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { useAppContext } from '../../contexts/AppContext';
-
-import { 
-  uploadFile, 
-  saveCreationMetadata, 
-  generateCreationRightsId 
-} from '../../services/fileUploadService';
 
 // File types mapping
 const fileTypeMappings = {
@@ -60,26 +54,10 @@ const fileTypeMappings = {
   'application/x-rar-compressed': 'Other'
 };
 
-// Function to map file type to category
-const mapTypeToCategory = (fileType) => {
-  switch (fileType.toLowerCase()) {
-    case 'image':
-      return 'Photography';
-    case 'music':
-      return 'Audio';
-    case 'text':
-      return 'Literature';
-    case 'video':
-      return 'Video';
-    default:
-      return fileType;
-  }
-};
-
 // Generate a unique creation rights ID
-// const generateCreationRightsId = () => {
-//   return `CR-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-// };
+const generateCreationRightsId = () => {
+  return `CR-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 const FileUploadPage = () => {
   const { setActiveView, setCurrentCreation, currentUser } = useAppContext();
@@ -87,7 +65,6 @@ const FileUploadPage = () => {
   // State for file selection and upload
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('idle'); // 'idle', 'uploading', 'success', 'error'
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
@@ -96,13 +73,6 @@ const FileUploadPage = () => {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('');
   const [dateCreated, setDateCreated] = useState(new Date().toISOString().split('T')[0]);
-  const [rights, setRights] = useState('');
-  const [notes, setNotes] = useState('');
-  const [tags, setTags] = useState([]);
-  const [tagInput, setTagInput] = useState('');
-  
-  // State for licensing
-  const [showLicensingInfo, setShowLicensingInfo] = useState(false);
   const [licensingCost, setLicensingCost] = useState('');
   
   // Reference for file input
@@ -111,26 +81,6 @@ const FileUploadPage = () => {
   // Generate a unique creation rights ID for this upload
   const [creationRightsId] = useState(generateCreationRightsId());
   
-  // Handle file drop
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFileSelection(e.dataTransfer.files[0]);
-    }
-  };
-
-  // Handle drag events
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
   // Handle file selection via button
   const handleFileSelect = () => {
     fileInputRef.current.click();
@@ -164,28 +114,21 @@ const FileUploadPage = () => {
                     mimeType.startsWith('text/') ? 'Text' : 'Other');
     setType(fileType);
     
-    // Add file type as a default tag
-    setTags([fileType.toLowerCase()]);
-    
     // Reset error state
     setErrorMessage('');
     setUploadStatus('idle');
   };
 
-  // Handle tag input
-  const handleTagInputKeyDown = (e) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault();
-      if (!tags.includes(tagInput.trim().toLowerCase())) {
-        setTags([...tags, tagInput.trim().toLowerCase()]);
-      }
-      setTagInput('');
+  // Clear selected file
+  const clearFile = () => {
+    if (filePreview) {
+      URL.revokeObjectURL(filePreview);
     }
-  };
-
-  // Remove a tag
-  const removeTag = (tagToRemove) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
+    setSelectedFile(null);
+    setFilePreview(null);
+    setUploadStatus('idle');
+    setUploadProgress(0);
+    setErrorMessage('');
   };
 
   // Format file size
@@ -205,18 +148,6 @@ const FileUploadPage = () => {
     }
   };
 
-  // Clear selected file
-  const clearFile = () => {
-    if (filePreview) {
-      URL.revokeObjectURL(filePreview);
-    }
-    setSelectedFile(null);
-    setFilePreview(null);
-    setUploadStatus('idle');
-    setUploadProgress(0);
-    setErrorMessage('');
-  };
-
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -232,18 +163,11 @@ const FileUploadPage = () => {
     try {
       // Create metadata object
       const metadata = {
-        category: mapTypeToCategory(type),
+        category: type === 'Image' ? 'Photography' : 
+                 type === 'Music' ? 'Audio' :
+                 type === 'Text' ? 'Literature' : type,
         creationRightsId: creationRightsId
       };
-      
-      // Add extra metadata based on file type
-      if (type === 'Image' || type === 'Photography') {
-        // For images, we might add dimensions later
-      } else if (type === 'Video') {
-        // For videos, we might add duration later
-      } else if (type === 'Music' || type === 'Audio') {
-        // For audio, we might add duration later
-      }
       
       // Create FormData for file upload
       const formData = new FormData();
@@ -251,24 +175,45 @@ const FileUploadPage = () => {
       formData.append('creationRightsId', creationRightsId);
       
       // Set up API URL
-      const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+      const API_URL = 'http://localhost:3001'; // Hardcoded for testing
       const sanitizedUserId = currentUser.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      
+      console.log('Upload details:', {
+        url: `${API_URL}/api/users/${sanitizedUserId}/upload`,
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        fileType: selectedFile.type,
+        creationRightsId: creationRightsId
+      });
       
       // Upload the file
       setUploadProgress(30);
-      console.log(`Uploading file to ${API_URL}/api/users/${sanitizedUserId}/upload`);
-      
       const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/upload`, {
         method: 'POST',
         body: formData
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Upload failed with status ${response.status}`);
+      // Log the full response for debugging
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      // Get response as text first for debugging
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
+      
+      // Parse the response if it's JSON
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing response JSON:', parseError);
+        throw new Error(`Failed to parse server response: ${responseText}`);
       }
       
-      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || result.message || `Upload failed with status ${response.status}`);
+      }
+      
       console.log('Upload result:', result);
       
       setUploadProgress(70);
@@ -279,10 +224,8 @@ const FileUploadPage = () => {
         title: title,
         type: type,
         dateCreated: dateCreated,
-        rights: rights,
-        notes: notes,
         licensingCost: licensingCost || null,
-        tags: tags,
+        tags: [type.toLowerCase()],
         fileSize: formatFileSize(selectedFile.size),
         fileType: selectedFile.type,
         fileName: selectedFile.name,
@@ -300,16 +243,32 @@ const FileUploadPage = () => {
         creationData.originalName = result.file.originalName;
       }
       
-      // Save metadata JSON to GCS
-      const metadataResponse = await fetch(`${API_URL}/api/users/${sanitizedUserId}/creations`, {
+      // Get existing creations to append to
+      const getCreationsResponse = await fetch(`${API_URL}/api/users/${sanitizedUserId}/creations`);
+      let existingCreations = [];
+      
+      if (getCreationsResponse.ok) {
+        existingCreations = await getCreationsResponse.json();
+        if (!Array.isArray(existingCreations)) {
+          existingCreations = [];
+        }
+      }
+      
+      // Add the new creation
+      const updatedCreations = [...existingCreations, creationData];
+      
+      // Save the updated creations
+      const saveResponse = await fetch(`${API_URL}/api/users/${sanitizedUserId}/creations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify([creationData]) // API expects an array
+        body: JSON.stringify(updatedCreations)
       });
       
-      if (!metadataResponse.ok) {
+      if (!saveResponse.ok) {
+        const saveErrorText = await saveResponse.text();
+        console.error('Error saving metadata:', saveErrorText);
         throw new Error('Failed to save metadata');
       }
       
@@ -349,21 +308,11 @@ const FileUploadPage = () => {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* File Upload Area */}
         {!selectedFile ? (
-          <div
-            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-              isDragging 
-                ? 'border-blue-500 bg-blue-50' 
-                : 'border-gray-300 hover:border-gray-400'
-            }`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-          >
+          <div className="border-2 border-dashed rounded-lg p-6 text-center hover:border-gray-400">
             <div className="flex flex-col items-center justify-center space-y-4">
               <Upload className="h-12 w-12 text-gray-400" />
               <div>
-                <p className="text-lg font-medium text-gray-700">Drag & drop a file here</p>
-                <p className="text-sm text-gray-500">or</p>
+                <p className="text-lg font-medium text-gray-700">Select a file to upload</p>
               </div>
               <Button type="button" onClick={handleFileSelect} className="mt-2">
                 Browse Files
@@ -417,36 +366,6 @@ const FileUploadPage = () => {
                 </div>
               </div>
             )}
-            
-            {/* File Preview */}
-            {filePreview && selectedFile && (
-              <div className="mt-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-                {selectedFile.type.startsWith('image/') ? (
-                  <img 
-                    src={filePreview} 
-                    alt="Preview" 
-                    className="max-h-48 rounded-md border border-gray-200 object-contain"
-                  />
-                ) : selectedFile.type.startsWith('video/') ? (
-                  <video 
-                    src={filePreview} 
-                    controls 
-                    className="max-h-48 rounded-md w-full"
-                  />
-                ) : selectedFile.type.startsWith('audio/') ? (
-                  <audio 
-                    src={filePreview} 
-                    controls 
-                    className="w-full mt-2"
-                  />
-                ) : (
-                  <div className="p-3 bg-gray-50 rounded-md border">
-                    <p className="text-sm">Preview not available for this file type</p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
         
@@ -497,101 +416,21 @@ const FileUploadPage = () => {
               </div>
               
               <div>
-                <Label htmlFor="tags">Tags</Label>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {tags.map(tag => (
-                    <div 
-                      key={tag} 
-                      className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs flex items-center"
-                    >
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => removeTag(tag)}
-                        className="ml-1 text-blue-600 hover:text-blue-800"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <Input
-                  id="tagInput"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={handleTagInputKeyDown}
-                  placeholder="Add tags (press Enter after each tag)"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="rights">Rights Information</Label>
-              <Textarea
-                id="rights"
-                value={rights}
-                onChange={(e) => setRights(e.target.value)}
-                placeholder="Copyright details, licensing terms, etc."
-                rows={3}
-              />
-            </div>
-            
-            <div>
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Additional information about your creation"
-                rows={3}
-              />
-            </div>
-            
-            {/* Licensing Cost Section */}
-            <div className="mt-4">
-              <div className="flex justify-between items-center mb-2">
-                <Label className="flex items-center">
-                  <span className="mr-1">Licensing Information</span>
-                  <button
-                    type="button"
-                    className="text-gray-500 hover:text-gray-700"
-                    onClick={() => window.alert("Set a standard licensing cost or leave empty to allow custom pricing via email contact.")}
-                  >
-                    <Info className="h-4 w-4" />
-                  </button>
+                <Label htmlFor="licensingCost" className="flex items-center">
+                  <DollarSign className="h-4 w-4 mr-1" />
+                  Licensing Cost (Optional)
                 </Label>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => setShowLicensingInfo(!showLicensingInfo)}
-                  className="text-blue-600"
-                >
-                  {showLicensingInfo ? 'Remove Licensing Cost' : 'Add Licensing Cost'}
-                </Button>
-              </div>
-              
-              {showLicensingInfo && (
-                <div className="p-4 bg-blue-50 rounded-md border border-blue-100">
-                  <Label htmlFor="licensingCost" className="flex items-center text-blue-700 mb-2">
-                    <DollarSign className="h-4 w-4 mr-1" />
-                    Standard Licensing Cost
-                  </Label>
-                  <div className="flex items-center">
-                    <span className="text-lg font-medium mr-2">$</span>
-                    <Input 
-                      id="licensingCost"
-                      value={licensingCost}
-                      onChange={handleLicensingCostChange}
-                      placeholder="0.00"
-                      className="w-40"
-                    />
-                  </div>
-                  <p className="text-xs text-blue-700 mt-2">
-                    Set a standard licensing cost or leave empty to allow custom pricing via email contact.
-                  </p>
+                <div className="flex items-center">
+                  <span className="text-lg font-medium mr-2">$</span>
+                  <Input 
+                    id="licensingCost"
+                    value={licensingCost}
+                    onChange={handleLicensingCostChange}
+                    placeholder="0.00"
+                    className="w-full"
+                  />
                 </div>
-              )}
+              </div>
             </div>
             
             <div className="hidden">

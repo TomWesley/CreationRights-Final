@@ -10,10 +10,14 @@ const multer = require('multer');
 const fs = require('fs');
 const instagramService = require('./services/instagramService');
 
-
 // Load environment variables
 dotenv.config();
 
+// Initialize Express app
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// CORS configuration
 const corsOptions = {
   origin: '*', // In production, you should restrict this
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
@@ -23,14 +27,29 @@ const corsOptions = {
   maxAge: 86400 // 1 day in seconds
 };
 
-// Initialize Express app
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-// Configure middleware
+// Apply CORS middleware
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
+
+// Add explicit handler for OPTIONS requests
+app.options('*', cors(corsOptions));
+
+// Add an explicit CORS preflight handler for the upload endpoint
+app.options('/api/users/:userId/upload', cors(corsOptions));
+
+// For debugging CORS issues, add this middleware before your routes
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  console.log('Request headers:', req.headers);
+  
+  // Set CORS headers for all responses
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  next();
+});
+
 
 // Initialize Google Cloud Storage
 let storage;
@@ -279,6 +298,85 @@ app.listen(PORT, () => {
 
 // User data endpoints
 // Update this in server/index.js
+
+app.post('/api/admin/fix-user-folders', async (req, res) => {
+  try {
+    // Check for admin authorization
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    // Use a simple token validation for admin access
+    // In production, use a proper authentication system
+    if (token !== process.env.ADMIN_TOKEN) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    if (!storage) {
+      return res.status(500).json({ error: 'Storage not initialized' });
+    }
+    
+    // Get all users by listing user profile directories
+    const bucket = storage.bucket(BUCKET_NAME);
+    const [files] = await bucket.getFiles({ prefix: 'users/' });
+    
+    // Extract unique user IDs from file paths
+    const userIds = new Set();
+    files.forEach(file => {
+      const pathParts = file.name.split('/');
+      if (pathParts.length >= 2) {
+        userIds.add(pathParts[1]);
+      }
+    });
+    
+    console.log(`Found ${userIds.size} users. Fixing folder structure...`);
+    
+    // Process each user
+    const results = {
+      totalUsers: userIds.size,
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      errors: []
+    };
+    
+    for (const userId of userIds) {
+      try {
+        results.processed++;
+        
+        // Skip empty user IDs and special folders
+        if (!userId || userId === '.keep' || userId.startsWith('.')) {
+          continue;
+        }
+        
+        // Ensure the user folder structure
+        const success = await ensureUserFolderStructure(userId);
+        
+        // Ensure creations metadata
+        if (success) {
+          await ensureCreationsMetadata(userId);
+          results.succeeded++;
+        } else {
+          results.failed++;
+          results.errors.push(`Failed to fix structure for user ${userId}`);
+        }
+      } catch (userError) {
+        results.failed++;
+        results.errors.push(`Error processing user ${userId}: ${userError.message}`);
+        console.error(`Error fixing user ${userId}:`, userError);
+      }
+    }
+    
+    console.log(`Fixed folder structure for ${results.succeeded} users`);
+    res.status(200).json(results);
+  } catch (error) {
+    console.error('Error fixing user folders:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/users/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -287,6 +385,12 @@ app.post('/api/users/:userId', async (req, res) => {
     console.log(`Saving user data for user ${userId}...`);
     console.log('Path params:', req.params);
     console.log('Request body:', JSON.stringify(userData).substring(0, 200) + '...');
+    
+    // Ensure the user has the proper folder structure
+    await ensureUserFolderStructure(userId);
+    
+    // Ensure the user has an empty creations metadata file if it doesn't exist
+    await ensureCreationsMetadata(userId);
     
     await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
@@ -403,12 +507,43 @@ app.get('/api/users/:userId/folders', async (req, res) => {
 });
 
 // Creations endpoints
+app.get('/api/users/:userId/creations', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Ensure the user has proper folder structure
+    await ensureUserFolderStructure(userId);
+    
+    const creations = await handleStorageOperation(async () => {
+      const bucket = storage.bucket(BUCKET_NAME);
+      const file = bucket.file(`users/${userId}/creations/metadata/all.json`);
+      
+      const [exists] = await file.exists();
+      if (!exists) {
+        // Initialize with empty array if file doesn't exist
+        await ensureCreationsMetadata(userId);
+        return [];
+      }
+      
+      const [content] = await file.download();
+      return JSON.parse(content.toString());
+    });
+    
+    res.status(200).json(creations);
+  } catch (error) {
+    console.error('Error loading creations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 app.post('/api/users/:userId/creations', async (req, res) => {
   try {
     const { userId } = req.params;
     const creations = req.body;
     
     console.log(`Saving creations for user ${userId}...`);
+    
+    // Ensure the user has proper folder structure
+    await ensureUserFolderStructure(userId);
     
     await handleStorageOperation(async () => {
       const bucket = storage.bucket(BUCKET_NAME);
@@ -425,33 +560,6 @@ app.post('/api/users/:userId/creations', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-app.get('/api/users/:userId/creations', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    const creations = await handleStorageOperation(async () => {
-      const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`users/${userId}/creations/metadata/all.json`);
-      
-      const [exists] = await file.exists();
-      if (!exists) return null;
-      
-      const [content] = await file.download();
-      return JSON.parse(content.toString());
-    });
-    
-    if (!creations) {
-      return res.status(404).json({ error: 'Creations not found' });
-    }
-    
-    res.status(200).json(creations);
-  } catch (error) {
-    console.error('Error loading creations:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // For thumbnails and previews for video/audio content
 app.post('/api/users/:userId/creation-thumbnail', upload.single('file'), async (req, res) => {
   try {
@@ -521,6 +629,9 @@ app.post('/api/users/:userId/creation-thumbnail', upload.single('file'), async (
 });
 
 // Upload endpoint for creation assets
+// Update the upload endpoint in server/index.js
+
+// Upload endpoint for creation assets - updated with folder structure check
 app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -530,6 +641,11 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
     const userId = req.params.userId;
     const file = req.file; // This is now in memory, not on disk
     const contentType = file.mimetype;
+    
+    console.log(`Processing upload for user: ${userId}, file: ${file.originalname}`);
+    
+    // Ensure the user has proper folder structure
+    await ensureUserFolderStructure(userId);
     
     // Get creationRightsId from form data
     const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
@@ -546,8 +662,15 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
     // Upload to Google Cloud Storage
     if (storage) {
       try {
-        const gcsFilePath = `users/${userId}/creations/assets/${creationRightsId}/${file.originalname}`;
         const bucket = storage.bucket(BUCKET_NAME);
+        
+        // Ensure the asset folder exists
+        const assetFolderPath = `users/${userId}/creations/assets/${creationRightsId}`;
+        await bucket.file(`${assetFolderPath}/.keep`).save('', {
+          contentType: 'text/plain'
+        });
+        
+        const gcsFilePath = `${assetFolderPath}/${file.originalname}`;
         const gcsFile = bucket.file(gcsFilePath);
         
         // Create a writable stream to GCS
@@ -562,6 +685,7 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
         // Handle errors and completion
         const streamPromise = new Promise((resolve, reject) => {
           stream.on('error', (err) => {
+            console.error(`Stream error uploading ${file.originalname}:`, err);
             reject(err);
           });
           
@@ -570,6 +694,7 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
             const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
             fileInfo.gcsUrl = publicUrl;
             fileInfo.url = publicUrl;
+            console.log(`File uploaded successfully: ${publicUrl}`);
             resolve();
           });
         });
@@ -579,12 +704,10 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
         
         // Wait for the stream to finish
         await streamPromise;
-        
-        console.log(`File uploaded successfully to GCS: ${fileInfo.gcsUrl}`);
       } catch (gcsError) {
         console.error('Error uploading to GCS:', gcsError);
         // Handle error but no local file to fall back to
-        return res.status(500).json({ error: 'Failed to upload to cloud storage' });
+        return res.status(500).json({ error: `Failed to upload to cloud storage: ${gcsError.message}` });
       }
     } else {
       // No GCS available
@@ -600,7 +723,6 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
     res.status(500).json({ error: error.message });
   }
 });
-
 // Add this to server/index.js
 
 // Proxy endpoint for GCS images
@@ -1423,6 +1545,218 @@ app.get('/api/users/:userId/social-profiles/instagram', async (req, res) => {
     res.status(200).json(profileData);
   } catch (error) {
     console.error('Error getting Instagram profile:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+/**
+ * Ensures a user has the proper folder structure in Google Cloud Storage
+ * @param {string} userId - The sanitized user ID
+ * @returns {Promise<boolean>} - Whether the operation was successful
+ */
+const ensureUserFolderStructure = async (userId) => {
+  try {
+    if (!storage) {
+      console.error('Storage not initialized');
+      return false;
+    }
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const folderStructure = [
+      `users/${userId}/.keep`,
+      `users/${userId}/profile/.keep`,
+      `users/${userId}/chats/.keep`,
+      `users/${userId}/creations/.keep`,
+      `users/${userId}/creations/assets/.keep`,
+      `users/${userId}/creations/metadata/.keep`
+    ];
+    
+    console.log(`Ensuring folder structure for user ${userId}...`);
+    
+    // Create all directories in parallel
+    await Promise.all(folderStructure.map(async (path) => {
+      try {
+        const [exists] = await bucket.file(path).exists();
+        if (!exists) {
+          await bucket.file(path).save('', {
+            metadata: {
+              contentType: 'text/plain'
+            }
+          });
+          console.log(`Created: ${path}`);
+        }
+      } catch (error) {
+        console.error(`Error creating ${path}:`, error);
+      }
+    }));
+    
+    return true;
+  } catch (error) {
+    console.error('Error ensuring user folder structure:', error);
+    return false;
+  }
+};
+const ensureCreationsMetadata = async (userId) => {
+  try {
+    if (!storage) {
+      console.error('Storage not initialized');
+      return false;
+    }
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    const metadataPath = `users/${userId}/creations/metadata/all.json`;
+    
+    const [exists] = await bucket.file(metadataPath).exists();
+    if (!exists) {
+      await bucket.file(metadataPath).save(JSON.stringify([]), {
+        contentType: 'application/json'
+      });
+      console.log(`Created empty creations metadata for user ${userId}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error ensuring creations metadata:', error);
+    return false;
+  }
+};
+
+app.get('/api/diagnostics/upload/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Check if we can reach the user folder
+    if (!storage) {
+      return res.status(500).json({ 
+        error: 'Storage not initialized',
+        environment: {
+          BUCKET_NAME,
+          NODE_ENV: process.env.NODE_ENV,
+          storageAvailable: !!storage
+        }
+      });
+    }
+    
+    // Check endpoints
+    const endpointInfo = {
+      uploadEndpoint: `/api/users/${userId}/upload`,
+      method: 'POST',
+      contentType: 'multipart/form-data',
+      routeRegistration: true,
+      userExists: false,
+      folderExists: false
+    };
+    
+    // Check if user folder exists
+    try {
+      const bucket = storage.bucket(BUCKET_NAME);
+      const [files] = await bucket.getFiles({ prefix: `users/${userId}/`, maxResults: 1 });
+      endpointInfo.userExists = files.length > 0;
+      
+      // Check specific creations folder
+      const [creationFiles] = await bucket.getFiles({ 
+        prefix: `users/${userId}/creations/`, 
+        maxResults: 1 
+      });
+      endpointInfo.folderExists = creationFiles.length > 0;
+      
+      // If folders don't exist, try to create them
+      if (!endpointInfo.folderExists) {
+        await ensureUserFolderStructure(userId);
+        endpointInfo.folderCreationAttempted = true;
+        
+        // Check again
+        const [newFiles] = await bucket.getFiles({ 
+          prefix: `users/${userId}/creations/`, 
+          maxResults: 1 
+        });
+        endpointInfo.folderExistsAfterCreation = newFiles.length > 0;
+      }
+    } catch (error) {
+      endpointInfo.folderCheckError = error.message;
+    }
+    
+    // Return diagnostic info
+    res.status(200).json({
+      userId,
+      timestamp: new Date().toISOString(),
+      endpointInfo,
+      server: {
+        nodejs: process.version,
+        platform: process.platform
+      }
+    });
+  } catch (error) {
+    console.error('Error in upload diagnostics:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/users/:userId/diagnostics/folders', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!storage) {
+      return res.status(500).json({ error: 'Storage not initialized' });
+    }
+    
+    // Define critical paths that should exist
+    const criticalPaths = [
+      `users/${userId}/profile/`,
+      `users/${userId}/creations/`,
+      `users/${userId}/creations/metadata/`,
+      `users/${userId}/creations/assets/`
+    ];
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // List all files in the user's directory
+    const [files] = await bucket.getFiles({ prefix: `users/${userId}/` });
+    
+    // Extract directory paths from files
+    const existingPaths = new Set();
+    files.forEach(file => {
+      const path = file.name.split('/').slice(0, -1).join('/') + '/';
+      existingPaths.add(path);
+    });
+    
+    // Check critical paths
+    const pathStatus = {};
+    criticalPaths.forEach(path => {
+      pathStatus[path] = existingPaths.has(path);
+    });
+    
+    // Check specific files
+    const fileStatus = {
+      'profile/info.json': false,
+      'creations/metadata/all.json': false
+    };
+    
+    files.forEach(file => {
+      Object.keys(fileStatus).forEach(targetFilePath => {
+        if (file.name === `users/${userId}/${targetFilePath}`) {
+          fileStatus[targetFilePath] = true;
+        }
+      });
+    });
+    
+    // Attempt to fix any missing structure
+    if (Object.values(pathStatus).some(status => !status) || 
+        Object.values(fileStatus).some(status => !status)) {
+      console.log(`Found missing folders/files for user ${userId}. Attempting to fix...`);
+      await ensureUserFolderStructure(userId);
+      await ensureCreationsMetadata(userId);
+    }
+    
+    res.status(200).json({
+      userId,
+      timestamp: new Date().toISOString(),
+      pathStatus,
+      fileStatus,
+      attempted_fix: Object.values(pathStatus).some(status => !status) || 
+                      Object.values(fileStatus).some(status => !status)
+    });
+  } catch (error) {
+    console.error('Error running folder diagnostics:', error);
     res.status(500).json({ error: error.message });
   }
 });

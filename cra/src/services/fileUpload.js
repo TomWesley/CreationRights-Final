@@ -13,6 +13,9 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
     const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
     
     console.log(`Uploading file to ${API_URL}/api/users/${sanitizedUserId}/upload`);
+    console.log(`User ID: ${userId} -> sanitized: ${sanitizedUserId}`);
+    console.log(`File: ${file.name}, size: ${file.size}, type: ${file.type}`);
+    if (creationRightsId) console.log(`Creation Rights ID: ${creationRightsId}`);
     
     // Create form data
     const formData = new FormData();
@@ -25,12 +28,23 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
     
     // Send request - notice the path is now /api/users/...
     const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/upload`, {
-      method: 'POST',
+      method: 'POST',  // Make sure we're explicitly using POST
       body: formData,
+      // Do not set Content-Type header - browser will set it with boundary for FormData
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorText = await response.text();
+      console.error(`Upload failed with status ${response.status}. Response:`, errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        // If response is not JSON, use the text directly
+        errorData = { error: errorText };
+      }
+      
       throw new Error(errorData.error || `Upload failed with status ${response.status}`);
     }
     

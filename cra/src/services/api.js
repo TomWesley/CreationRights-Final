@@ -192,6 +192,7 @@ export const loadCreations = async (email) => {
     
     if (!response.ok) {
       if (response.status === 404) {
+        console.log('No creations found, returning empty array');
         return []; // No creations found
       }
       throw new Error(`Failed to load creations: ${response.status}`);
@@ -199,6 +200,12 @@ export const loadCreations = async (email) => {
     
     const creations = await response.json();
     console.log(`Loaded ${creations.length} creations from server`);
+    
+    // Defensive programming - ensure creations is an array
+    if (!Array.isArray(creations)) {
+      console.warn('Received non-array creations data, initializing empty array');
+      return [];
+    }
     
     // Process each creation to ensure URLs and metadata are correct
     return creations.map(creation => {
@@ -562,6 +569,59 @@ export const saveSocialProfiles = async (userEmail, socialProfiles) => {
     throw error;
   }
 };
+
+
+/**
+ * Retry a function with exponential backoff
+ * @param {Function} fn - The function to retry
+ * @param {number} maxRetries - Maximum number of retries
+ * @param {number} initialDelay - Initial delay in ms
+ * @returns {Promise<any>} - Promise with result
+ */
+const retryWithBackoff = async (fn, maxRetries = 3, initialDelay = 300) => {
+  let retries = 0;
+  let delay = initialDelay;
+  
+  while (true) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (retries >= maxRetries) throw error;
+      
+      console.log(`Retry ${retries + 1}/${maxRetries} after ${delay}ms`);
+      
+      // Wait for the delay
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Increase delay with some randomness for next attempt
+      delay = delay * 2 * (0.8 + Math.random() * 0.4);
+      retries++;
+    }
+  }
+};
+
+/**
+ * Check if a user has the necessary folder structure and create if missing
+ * @param {string} email - User's email 
+ * @returns {Promise<boolean>} - Whether the operation was successful
+ */
+export const checkUserFolderStructure = async (email) => {
+  try {
+    const sanitizedEmail = sanitizeEmail(email);
+    console.log(`Checking folder structure for ${sanitizedEmail}`);
+    
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+    
+    // Make a request to creations endpoint which now ensures folders exist
+    await fetch(`${API_URL}/users/${sanitizedEmail}/creations`);
+    
+    return true;
+  } catch (error) {
+    console.error('Error checking folder structure:', error);
+    return false;
+  }
+};
+
 
 /**
  * Load social profiles from storage

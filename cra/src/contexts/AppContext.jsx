@@ -93,6 +93,26 @@ export const AppProvider = ({ children }) => {
             
             console.log(`Found authenticated user: ${authState.currentUser.email}`);
             
+            // First ensure user folder structure by making a diagnostic call
+            try {
+              const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+              const sanitizedUserId = authState.currentUser.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+              
+              const diagnosticResponse = await fetch(`${API_URL}/api/users/${sanitizedUserId}/diagnostics/folders`);
+              if (diagnosticResponse.ok) {
+                const diagnosticData = await diagnosticResponse.json();
+                console.log('Folder structure diagnostic:', diagnosticData);
+                
+                // If any folder or file was fixed, we should reload data
+                if (diagnosticData.attempted_fix) {
+                  console.log('Folder structure was fixed, reloading data...');
+                }
+              }
+            } catch (diagnosticError) {
+              console.error('Error running folder structure diagnostic:', diagnosticError);
+              // Continue anyway to try loading data
+            }
+            
             // Load data for this specific user from server only
             await loadUserDataFromServer(authState.currentUser.email);
           } else {

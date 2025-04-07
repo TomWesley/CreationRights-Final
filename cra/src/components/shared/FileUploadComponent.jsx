@@ -1,4 +1,4 @@
-// src/components/shared/FileUploadComponent.jsx
+// Improved FileUploadComponent.jsx
 
 import React, { useState, useRef } from 'react';
 import { Upload, File, X, Loader2 } from 'lucide-react';
@@ -206,12 +206,17 @@ const FileUploadComponent = ({ onFileProcessed }) => {
       if (currentUser && currentUser.email) {
         try {
           console.log('Uploading file to server with creationRightsId:', creationRightsId);
+          console.log('User email:', currentUser.email);
+          setUploadProgress(10); // Show some initial progress
+          
+          // Perform the upload with explicit POST method
           const uploadResult = await uploadFile(currentUser.email, selectedFile, creationRightsId);
           uploadedFileInfo = uploadResult.file;
           console.log('Upload result:', uploadedFileInfo);
           setUploadProgress(100);
         } catch (uploadError) {
           console.error('Error uploading file:', uploadError);
+          setError(`Upload failed: ${uploadError.message}`);
           // Continue with local file handling if upload fails
         }
       }
@@ -323,6 +328,7 @@ const FileUploadComponent = ({ onFileProcessed }) => {
   const clearFile = () => {
     setFile(null);
     setUploadProgress(0);
+    setError('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -394,6 +400,16 @@ const FileUploadComponent = ({ onFileProcessed }) => {
           {error && (
             <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm mt-2">
               {error}
+              <div className="mt-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleFile(file)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  Try Again
+                </Button>
+              </div>
             </div>
           )}
         </div>

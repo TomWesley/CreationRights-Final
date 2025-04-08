@@ -30,10 +30,18 @@ const ArtistsList = () => {
       try {
         // Fetch all users from Firestore
         const users = await getAllUsers();
-        console.log("Raw artists data:", users);
+        console.log("Raw users data:", users);
+        
+        // Filter to include only users with userType = 'creator'
+        const creatorUsers = users.filter(user => 
+          user.userType === 'creator' || // Check primary userType field
+          user.type === 'creator'        // Check legacy type field for backward compatibility
+        );
+        
+        console.log("Filtered creator users:", creatorUsers);
         
         // Transform the data to fit our component's needs
-        const transformedData = users.map(user => ({
+        const transformedData = creatorUsers.map(user => ({
           // Basic user info
           id: user.id || user.uid,
           uid: user.uid || user.id,

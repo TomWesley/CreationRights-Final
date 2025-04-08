@@ -168,7 +168,7 @@ const Settings = () => {
       console.log("Saving complete user data to Firestore:", completeUserData);
       
       // Save to Firestore
-      (currentUser.uid, completeUserData);
+      await updateUserProfile(currentUser.uid, completeUserData);
       
       // Also update the user in context
       await updateUserInContext(completeUserData);

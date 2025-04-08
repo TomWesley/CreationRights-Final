@@ -1,21 +1,18 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { 
-  saveUserData, 
-  loadUserData, 
-  saveFolders, 
-  loadFolders, 
-  saveCreations, 
-  loadCreations 
-} from '../services/api';
+  auth, 
+  loginWithEmail, 
+  createUserWithEmail, 
+  logoutUser, 
+  getUserProfile,
+  updateUserProfile as firebaseUpdateUserProfile
+} from '../services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
   mapTypeToMetadataCategory,
   generateCreationRightsId
 } from '../services/metadataExtraction';
-
-// Sample data - used as fallback or initial data
-const initialFolders = [
-  
-];
+import { loadFolders, loadCreations, saveFolders, saveCreations } from '../services/api';
 
 // Create context
 export const AppContext = createContext();
@@ -28,7 +25,6 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   
   // UI state
-  // Initialize activeView from localStorage if available
   const [activeView, setActiveView] = useState(() => {
     const savedView = localStorage.getItem('activeView');
     return savedView || 'dashboard';
@@ -67,103 +63,101 @@ export const AppProvider = ({ children }) => {
     accountType: 'creator' 
   });
 
+  // Listen for Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setIsLoading(true);
+      
+      if (user) {
+        console.log(`User authenticated: ${user.email}`);
+        
+        try {
+          // Fetch user profile from Firestore
+          const userProfile = await getUserProfile(user.uid);
+          
+          if (userProfile) {
+            console.log('User profile found:', userProfile);
+            setCurrentUser({
+              uid: user.uid,
+              email: user.email,
+              ...userProfile
+            });
+            setUserType(userProfile.userType || 'creator');
+          } else {
+            // No profile yet, create minimal one
+            console.log('No user profile found, creating minimal profile');
+            const minimalProfile = {
+              uid: user.uid,
+              email: user.email,
+              name: user.email.split('@')[0],
+              userType: 'creator',
+              createdAt: new Date().toISOString()
+            };
+            setCurrentUser(minimalProfile);
+            setUserType('creator');
+            
+            // Save minimal profile to Firestore
+            await firebaseUpdateUserProfile(user.uid, minimalProfile);
+          }
+          
+          // Load user data
+          await loadUserData(user.email);
+          setIsAuthenticated(true);
+        } catch (error) {
+          console.error('Error setting up user profile:', error);
+          setIsAuthenticated(false);
+        }
+      } else {
+        console.log('User not authenticated');
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        
+        // Clear data
+        setFolders([]);
+        setCreations([]);
+        setCurrentFolder(null);
+        setBreadcrumbs([]);
+      }
+      
+      setIsLoading(false);
+    });
+    
+    // Clean up subscription
+    return () => unsubscribe();
+  }, []);
+
   // Save activeView to localStorage whenever it changes
   useEffect(() => {
     if (activeView && isAuthenticated) {
       localStorage.setItem('activeView', activeView);
     }
   }, [activeView, isAuthenticated]);
-  
 
-  // Load authentication state from localStorage
-  useEffect(() => {
-    const loadAuthState = async () => {
-      setIsLoading(true);
-      
-      try {
-        const savedAuth = localStorage.getItem('authState');
-        
-        if (savedAuth) {
-          const authState = JSON.parse(savedAuth);
-          
-          // Check if auth state is valid and has the user's email
-          if (authState.isAuthenticated && authState.currentUser && authState.currentUser.email) {
-            setIsAuthenticated(true);
-            setUserType(authState.userType || 'creator');
-            setCurrentUser(authState.currentUser);
-            
-            console.log(`Found authenticated user: ${authState.currentUser.email}`);
-            
-            // First ensure user folder structure by making a diagnostic call
-            try {
-              const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
-              const sanitizedUserId = authState.currentUser.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
-              
-              const diagnosticResponse = await fetch(`${API_URL}/api/users/${sanitizedUserId}/diagnostics/folders`);
-              if (diagnosticResponse.ok) {
-                const diagnosticData = await diagnosticResponse.json();
-                console.log('Folder structure diagnostic:', diagnosticData);
-                
-                // If any folder or file was fixed, we should reload data
-                if (diagnosticData.attempted_fix) {
-                  console.log('Folder structure was fixed, reloading data...');
-                }
-              }
-            } catch (diagnosticError) {
-              console.error('Error running folder structure diagnostic:', diagnosticError);
-              // Continue anyway to try loading data
-            }
-            
-            // Load data for this specific user from server only
-            await loadUserDataFromServer(authState.currentUser.email);
-          } else {
-            // Not authenticated, clear activeView
-            setActiveView('dashboard');
-            localStorage.removeItem('activeView');
-          }
-        } else {
-          // Not authenticated, clear activeView
-          setActiveView('dashboard');
-          localStorage.removeItem('activeView');
-        }
-      } catch (error) {
-        console.error('Error loading auth state:', error);
-        localStorage.removeItem('authState');
-        // Reset to dashboard on error
-        setActiveView('dashboard');
-        localStorage.removeItem('activeView');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    loadAuthState();
-  }, []);
-
-  // Load user data from server
-  const loadUserDataFromServer = async (userEmail) => {
+  // Load user data (folders and creations)
+  const loadUserData = async (email) => {
     try {
       setIsLoading(true);
-      console.log(`Loading data for user: ${userEmail}`);
+      console.log(`Loading data for user: ${email}`);
       
       // Clear existing data first to prevent mixing
       setFolders([]);
       setCreations([]);
       
-      // Try to load folders from server only
-      const userFolders = await loadFolders(userEmail);
+      // Try to load folders from server
+      const userFolders = await loadFolders(email);
       if (userFolders && userFolders.length > 0) {
-        console.log(`Loaded ${userFolders.length} folders for user ${userEmail}`);
+        console.log(`Loaded ${userFolders.length} folders for user ${email}`);
         setFolders(userFolders);
       }
-      // Try to load creations from server only
-      const userCreations = await loadCreations(userEmail);
+      
+      // Try to load creations from server
+      const userCreations = await loadCreations(email);
       if (userCreations && userCreations.length > 0) {
-        console.log(`Loaded ${userCreations.length} creations for user ${userEmail}`);
+        console.log(`Loaded ${userCreations.length} creations for user ${email}`);
         setCreations(userCreations);
       }
     } catch (error) {
-      console.error('Error loading user data from server:', error);
+      console.error('Error loading user data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -173,7 +167,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const syncFolders = async () => {
       if (isAuthenticated && currentUser && currentUser.email && folders.length > 0) {
-        // Save folders only to server
+        // Save folders to server
         saveFolders(currentUser.email, folders).catch(err => {
           console.error('Error saving folders to server:', err);
         });
@@ -187,7 +181,7 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const syncCreations = async () => {
       if (isAuthenticated && currentUser && currentUser.email && creations.length > 0) {
-        // Save creations only to server
+        // Save creations to server
         saveCreations(currentUser.email, creations).catch(err => {
           console.error('Error saving creations to server:', err);
         });
@@ -197,159 +191,124 @@ export const AppProvider = ({ children }) => {
     syncCreations();
   }, [creations, isAuthenticated, currentUser]);
 
-  // Actions
+  // Auth actions
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     
     try {
-      // Instead of hardcoded user types, use the email to identify the user
-      const userEmail = loginCredentials.email.trim().toLowerCase();
+      const { email, password, accountType } = loginCredentials;
       
-      if (!userEmail) {
-        throw new Error('Email is required');
+      if (!email || !password) {
+        throw new Error('Email and password are required');
       }
       
-      // Create a basic user object based on the email (only used if no existing profile is found)
-      const basicUser = {
-        id: userEmail, // Use email as ID for simplicity
-        email: userEmail,
-        name: userEmail.split('@')[0], // Simple name from email
-        type: loginCredentials.accountType
-      };
+      // Attempt to login with Firebase
+      const user = await loginWithEmail(email, password);
       
-      // Clear any existing data
-      setFolders([]);
-      setCreations([]);
-      setCurrentFolder(null);
-      setBreadcrumbs([]);
-      
-      // First, check if user data already exists on the server
-      try {
-        console.log(`Checking if user profile exists for ${userEmail}`);
-        const existingUserData = await loadUserData(userEmail);
-        
-        if (existingUserData) {
-          console.log('Existing user profile found:', existingUserData);
-          
-          // Use the existing user data instead of the basic user object
-          setCurrentUser(existingUserData);
-          setUserType(existingUserData.type || existingUserData.userType || loginCredentials.accountType);
-          
-          // Save auth state to localStorage with the complete user data
-          const authState = {
-            isAuthenticated: true,
-            userType: existingUserData.type || existingUserData.userType || loginCredentials.accountType,
-            currentUser: existingUserData,
-            timestamp: new Date().getTime()
-          };
-          localStorage.setItem('authState', JSON.stringify(authState));
-          
-          // No need to save user data, as it already exists
-        } else {
-          console.log('No existing user profile found. Creating new profile.');
-          
-          // Set user info with basic data
-          setCurrentUser(basicUser);
-          setUserType(loginCredentials.accountType);
-          
-          // Save auth state to localStorage with basic user data
-          const authState = {
-            isAuthenticated: true,
-            userType: loginCredentials.accountType,
-            currentUser: basicUser,
-            timestamp: new Date().getTime()
-          };
-          localStorage.setItem('authState', JSON.stringify(authState));
-          
-          // Save basic user data to server only for new users
-          await saveUserData(userEmail, basicUser);
+      // The auth state listener will handle setting up the user
+      // but let's ensure the userType is set
+      if (user) {
+        // Update user profile with accountType if needed
+        const profile = await getUserProfile(user.uid);
+        if (!profile || profile.userType !== accountType) {
+          await firebaseUpdateUserProfile(user.uid, {
+            userType: accountType
+          });
         }
-      } catch (error) {
-        console.error('Error checking for existing user profile:', error);
-        
-        // Fallback to basic user creation as before
-        setCurrentUser(basicUser);
-        setUserType(loginCredentials.accountType);
-        
-        // Save auth state to localStorage
-        const authState = {
-          isAuthenticated: true,
-          userType: loginCredentials.accountType,
-          currentUser: basicUser,
-          timestamp: new Date().getTime()
-        };
-        localStorage.setItem('authState', JSON.stringify(authState));
-        
-        // Attempt to save user data
-        await saveUserData(userEmail, basicUser);
       }
-      
-      // Set authentication state
-      setIsAuthenticated(true);
-      
-      // Load user data from server based on email
-      await loadUserDataFromServer(userEmail);
       
       setShowLoginModal(false);
       setActiveView('dashboard');
     } catch (error) {
       console.error('Login error:', error);
-      alert('Error during login. Please try again.');
+      alert('Error during login. Please check your credentials and try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    // Clear all user data
-    setCreations([]);
-    setFolders([]);
-    setCurrentFolder(null);
-    setBreadcrumbs([]);
+  const handleSignup = async (signupData) => {
+    setIsLoading(true);
     
-    // Clear authentication state
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-    setShowLoginModal(false);
-    
-    // Reset view to dashboard and clear from localStorage
-    setActiveView('dashboard');
-    localStorage.removeItem('activeView');
-    
-    // Clear auth state from localStorage
-    localStorage.removeItem('authState');
+    try {
+      const { email, password, name, accountType } = signupData;
+      
+      if (!email || !password) {
+        throw new Error('Email and password are required');
+      }
+      
+      // Create user with Firebase Auth
+      const user = await createUserWithEmail(email, password);
+      
+      // Create user profile in Firestore
+      await firebaseUpdateUserProfile(user.uid, {
+        email,
+        name: name || email.split('@')[0],
+        userType: accountType || 'creator',
+        createdAt: new Date().toISOString()
+      });
+      
+      // Auth state listener will handle the rest
+      setShowLoginModal(false);
+      setActiveView('dashboard');
+      
+      return true;
+    } catch (error) {
+      console.error('Signup error:', error);
+      alert('Error creating account. ' + error.message);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      
+      // Clear all user data
+      setCreations([]);
+      setFolders([]);
+      setCurrentFolder(null);
+      setBreadcrumbs([]);
+      
+      // Reset view to dashboard and clear from localStorage
+      setActiveView('dashboard');
+      localStorage.removeItem('activeView');
+      
+      // Auth state listener will handle the rest
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
   
   const updateUserProfile = async (updatedUserData) => {
     setIsLoading(true);
     
     try {
-      // Make sure we're using persistent URLs for photos, not object URLs
-      // Replace temporary object URLs with persistent ones from Cloud Storage
-      if (updatedUserData.photoUrl && updatedUserData.photoUrl.startsWith('blob:')) {
-        console.warn('Replacing temporary object URL with persisted URL - this should be handled in the component');
+      if (!currentUser || !currentUser.uid) {
+        throw new Error('User not authenticated');
       }
       
-      // Update the user data in state
-      setCurrentUser(updatedUserData);
+      // Update the Firestore profile
+      await firebaseUpdateUserProfile(currentUser.uid, updatedUserData);
       
-      // Update auth state in localStorage
-      const authState = {
-        isAuthenticated: true,
-        userType: userType,
-        currentUser: updatedUserData,
-        timestamp: new Date().getTime()
-      };
-      localStorage.setItem('authState', JSON.stringify(authState));
+      // Update local state
+      setCurrentUser({
+        ...currentUser,
+        ...updatedUserData
+      });
       
-      // Save to server (if using an API)
-      if (updatedUserData.email) {
-        await saveUserData(updatedUserData.email, updatedUserData);
-        console.log('Profile updated successfully on server');
+      // Update userType if it changed
+      if (updatedUserData.userType && updatedUserData.userType !== userType) {
+        setUserType(updatedUserData.userType);
       }
+      
+      return true;
     } catch (error) {
       console.error('Error updating profile:', error);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -413,13 +372,6 @@ export const AppProvider = ({ children }) => {
       }
       e.target.value = '';
     }
-  };
-
-  const removeTag = (tagToRemove) => {
-    setCurrentCreation({
-      ...currentCreation,
-      tags: currentCreation.tags.filter(tag => tag !== tagToRemove)
-    });
   };
 
   const resetForm = (preserveMetadata = false) => {
@@ -501,7 +453,6 @@ export const AppProvider = ({ children }) => {
       // Update local state immediately for better UX
       setCreations(updatedCreations);
       
-      
       // Reset form and navigate
       resetForm();
       setActiveView('myCreations');
@@ -526,83 +477,6 @@ export const AppProvider = ({ children }) => {
     setCurrentCreation(creation);
     setEditMode(true);
     setActiveView('editCreation');
-  };
-
-
-  
-  // Add this debug function to help trace the creation lifecycle in AppContext.jsx
-  const debugCreation = (operation, creation) => {
-    const debugInfo = {
-      operation,
-      id: creation.id,
-      title: creation.title,
-      type: creation.type,
-      hasMetadata: !!creation.metadata,
-      creationRightsId: creation.metadata?.creationRightsId || 'none',
-      fileUrl: creation.fileUrl || creation.gcsUrl || 'none',
-      timestamp: new Date().toISOString()
-    };
-    
-    console.log(`[CreationDebug] ${operation}:`, debugInfo);
-  };
-  
-  // Add a function to verify creations data consistency in AppContext.jsx
-  const verifyCreationsConsistency = async () => {
-    if (!currentUser?.email) return;
-    
-    try {
-      console.log('Verifying creations data consistency...');
-      
-      // Fetch creations from server
-      const serverCreations = await loadCreations(currentUser.email);
-      
-      // Compare with local state
-      const localCreationsCount = creations.length;
-      const serverCreationsCount = serverCreations.length;
-      
-      console.log(`Local creations: ${localCreationsCount}, Server creations: ${serverCreationsCount}`);
-      
-      if (localCreationsCount !== serverCreationsCount) {
-        console.warn('Creations count mismatch! Synchronizing from server...');
-        setCreations(serverCreations);
-      } else {
-        // Check for metadata consistency
-        let inconsistencies = 0;
-        
-        for (const localCreation of creations) {
-          const serverCreation = serverCreations.find(c => c.id === localCreation.id);
-          if (!serverCreation) {
-            console.warn(`Creation ${localCreation.id} exists locally but not on server`);
-            inconsistencies++;
-            continue;
-          }
-          
-          // Check for essential fields
-          if (!localCreation.metadata && serverCreation.metadata) {
-            console.warn(`Creation ${localCreation.id} has metadata on server but not locally`);
-            inconsistencies++;
-          } else if (localCreation.metadata && !serverCreation.metadata) {
-            console.warn(`Creation ${localCreation.id} has metadata locally but not on server`);
-            inconsistencies++;
-          }
-          
-          // Check file URLs
-          if (localCreation.fileUrl !== serverCreation.fileUrl) {
-            console.warn(`Creation ${localCreation.id} has different fileUrl`);
-            inconsistencies++;
-          }
-        }
-        
-        if (inconsistencies > 0) {
-          console.warn(`Found ${inconsistencies} inconsistencies. Synchronizing from server...`);
-          setCreations(serverCreations);
-        } else {
-          console.log('Creations are consistent between client and server');
-        }
-      }
-    } catch (error) {
-      console.error('Error verifying creations consistency:', error);
-    }
   };
 
   const handleDelete = (id) => {
@@ -801,13 +675,13 @@ export const AppProvider = ({ children }) => {
       setIsLoading,
       getFilteredCreations,
       handleLogin,
+      handleSignup,
       handleLogout,
       handleInputChange,
       handleLoginInput,
       handleTagInput,
-      removeTag,
       resetForm,
-      handleSubmit,  // The unified submit function
+      handleSubmit,
       handleEdit,
       handleDelete,
       handleUpdateCreation,
@@ -818,6 +692,7 @@ export const AppProvider = ({ children }) => {
       buildBreadcrumbs,
       getSubFolderIds,
       updateUserProfile,
+      loadUserData
     }}>
       {children}
     </AppContext.Provider>

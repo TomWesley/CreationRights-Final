@@ -5,7 +5,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useAppContext } from '../../contexts/AppContext';
 import ProfilePhoto from '../shared/ProfilePhoto';
-import { getAllUsers, createChat } from '../../services/firebase';
+import { getAllUsers } from '../../services/firebase';
+import { createChat } from '../../services/firestoreChat';
 
 const ArtistsList = () => {
   const appContext = useAppContext();
@@ -567,4 +568,4 @@ const ArtistsList = () => {
  };
  
  
- export default ArtistsList;// Fetch artists data
+ export default ArtistsList;

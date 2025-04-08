@@ -5,6 +5,7 @@ import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Inst
 import FolderStructure from '../shared/FolderStructure';
 import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
+import { getUnreadMessagesCount } from '../../services/firestoreChat';
 
 const AppSidebar = () => {
   const { 
@@ -20,7 +21,6 @@ const AppSidebar = () => {
   
   const isAgency = userType === 'agency';
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
   // Fetch unread message count
   useEffect(() => {
@@ -28,21 +28,7 @@ const AppSidebar = () => {
       if (!currentUser?.email) return;
       
       try {
-        const response = await fetch(`${API_URL}/api/chats/${currentUser.email}`);
-        if (!response.ok) return;
-        
-        const chats = await response.json();
-        let count = 0;
-        
-        // For each chat, count unread messages from other users
-        for (const chat of chats) {
-          if (chat.messages) {
-            count += chat.messages.filter(msg => 
-              !msg.read && msg.sender !== currentUser.email
-            ).length;
-          }
-        }
-        
+        const count = await getUnreadMessagesCount(currentUser.email);
         setUnreadMessageCount(count);
       } catch (error) {
         console.error('Error fetching unread count:', error);
@@ -56,7 +42,7 @@ const AppSidebar = () => {
     const interval = setInterval(fetchUnreadCount, 30000); // Check every 30 seconds
     
     return () => clearInterval(interval);
-  }, [currentUser, API_URL]);
+  }, [currentUser]);
   
   return (
     <>
@@ -111,17 +97,17 @@ const AppSidebar = () => {
               </button>
             </div>
             <div>
-  <button
-    className={`nav-item ${activeView === 'licenses' ? 'nav-active' : ''}`}
-    onClick={() => {
-      setActiveView('licenses');
-      setIsMobileMenuOpen(false);
-    }}
-  >
-    <DollarSign className="nav-icon" />
-    {userType === 'creator' ? 'Licenses Sold' : 'Licenses'}
-  </button>
-</div>
+              <button
+                className={`nav-item ${activeView === 'licenses' ? 'nav-active' : ''}`}
+                onClick={() => {
+                  setActiveView('licenses');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <DollarSign className="nav-icon" />
+                {userType === 'creator' ? 'Licenses Sold' : 'Licenses'}
+              </button>
+            </div>
             <div>
               <button
                 className={`nav-item ${activeView === 'team' ? 'nav-active' : ''}`}

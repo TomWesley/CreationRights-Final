@@ -8,6 +8,14 @@ import { Input } from '../ui/input';
 import { useAppContext } from '../../contexts/AppContext';
 import ProfilePhoto from '../shared/ProfilePhoto';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
+import { 
+  getUserChats, 
+  getChatMessages, 
+  sendMessage as sendFirestoreMessage, 
+  markAllMessagesAsRead,
+  getUnreadMessagesCount
+} from '../../services/firestoreChat';
+import { getAllUsers } from '../../services/firebase';
 
 const ChatPage = () => {
   const { currentUser, setActiveView } = useAppContext();
@@ -20,7 +28,6 @@ const ChatPage = () => {
   const [activeTab, setActiveTab] = useState('chats');
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
-  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
   // Function to update URL with chat ID for direct linking
   const updateUrlWithChatId = useCallback((chatId) => {
@@ -34,36 +41,27 @@ const ChatPage = () => {
   // Define markMessagesAsRead with useCallback
   const markMessagesAsRead = useCallback(async (chatId) => {
     try {
-      await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/read`, {
-        method: 'POST',
-      });
+      if (!currentUser?.email || !chatId) return;
+      await markAllMessagesAsRead(chatId, currentUser.email);
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
-  }, [API_URL, currentUser?.email]);
+  }, [currentUser?.email]);
 
   // Define fetchChatMessages with useCallback
   const fetchChatMessages = useCallback(async (chatId) => {
-    if (!currentUser?.email) return;
+    if (!currentUser?.email || !chatId) return;
     
     try {
       console.log(`Fetching messages for chat ${chatId}...`);
-      const response = await fetch(`${API_URL}/api/chats/${currentUser.email}/${chatId}/messages`);
+      const messages = await getChatMessages(chatId);
       
-      if (!response.ok) {
-        console.error(`Failed to fetch messages: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error(`Error response: ${errorText}`);
-        throw new Error('Failed to fetch messages');
-      }
-      
-      const data = await response.json();
-      console.log(`Fetched ${data.length} messages for chat ${chatId}`);
+      console.log(`Fetched ${messages.length} messages for chat ${chatId}`);
       
       // Update the chat with messages
       setChats(prev => 
         prev.map(chat => 
-          chat.id === chatId ? { ...chat, messages: data } : chat
+          chat.id === chatId ? { ...chat, messages } : chat
         )
       );
       
@@ -72,7 +70,7 @@ const ChatPage = () => {
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
-  }, [API_URL, currentUser?.email, markMessagesAsRead]);
+  }, [currentUser?.email, markMessagesAsRead]);
 
   // Define fetchChats with useCallback
   const fetchChats = useCallback(async () => {
@@ -80,22 +78,14 @@ const ChatPage = () => {
     
     try {
       setLoading(true);
-      console.log(`Fetching chats for ${currentUser.email}...`);
+      console.log(`Fetching chats for ${currentUser.email} (UID: ${currentUser.uid})...`);
       
-      const response = await fetch(`${API_URL}/api/chats/${currentUser.email}`);
+      const userChats = await getUserChats(currentUser.email, currentUser.uid);
       
-      if (!response.ok) {
-        console.error(`Failed to fetch chats: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error(`Error response: ${errorText}`);
-        throw new Error('Failed to fetch chats');
-      }
-      
-      const data = await response.json();
-      console.log(`Fetched ${data.length} chats`);
+      console.log(`Fetched ${userChats.length} chats`);
       
       // Log each chat for debugging
-      data.forEach((chat, index) => {
+      userChats.forEach((chat, index) => {
         console.log(`Chat ${index+1}:`, {
           id: chat.id,
           participants: chat.participants,
@@ -103,12 +93,12 @@ const ChatPage = () => {
         });
       });
       
-      setChats(data);
+      setChats(userChats);
       setLoading(false);
       
       // If we have an active chat, fetch its messages
       if (activeChat) {
-        const chatExists = data.some(chat => chat.id === activeChat);
+        const chatExists = userChats.some(chat => chat.id === activeChat);
         if (chatExists) {
           fetchChatMessages(activeChat);
         } else {
@@ -121,21 +111,17 @@ const ChatPage = () => {
       // Initialize with empty array if first time
       setChats([]);
     }
-  }, [API_URL, currentUser?.email, activeChat, fetchChatMessages]);
+  }, [currentUser?.email, currentUser?.uid, activeChat, fetchChatMessages]);
 
   // Define fetchAllUsers with useCallback
   const fetchAllUsers = useCallback(async () => {
     if (!currentUser?.email) return;
     
     try {
-      const response = await fetch(`${API_URL}/api/users`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch users');
-      }
-      const data = await response.json();
+      const users = await getAllUsers();
       
       // Filter out current user
-      const otherUsers = data.filter(user => user.email !== currentUser.email);
+      const otherUsers = users.filter(user => user.email !== currentUser.email);
       setAllUsers(otherUsers);
       setFilteredUsers(otherUsers);
     } catch (error) {
@@ -143,7 +129,7 @@ const ChatPage = () => {
       setAllUsers([]);
       setFilteredUsers([]);
     }
-  }, [API_URL, currentUser?.email]);
+  }, [currentUser?.email]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -153,49 +139,73 @@ const ChatPage = () => {
   const startChat = useCallback(async (user) => {
     if (!currentUser?.email) return;
     
-    // Check if chat already exists
-    const existingChat = chats.find(chat => 
-      chat.participants.some(p => p.email === user.email)
-    );
+    setLoading(true); // Show loading indicator
     
-    if (existingChat) {
-      setActiveChat(existingChat.id);
-      setActiveTab('chats');
-      fetchChatMessages(existingChat.id);
-      updateUrlWithChatId(existingChat.id);
-      return;
-    }
-    
-    // Create new chat
     try {
-      const response = await fetch(`${API_URL}/api/chats`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          participants: [
-            { email: currentUser.email, name: currentUser.name || currentUser.email },
-            { email: user.email, name: user.name || user.email }
-          ]
-        })
-      });
+      console.log("Starting chat with artist:", user.name);
       
-      if (!response.ok) {
-        throw new Error('Failed to create chat');
+      // Check if chat already exists
+      const existingChat = chats.find(chat => 
+        chat.participants.some(p => p.email === user.email)
+      );
+      
+      if (existingChat) {
+        console.log("Using existing chat:", existingChat.id);
+        setActiveChat(existingChat.id);
+        await fetchChatMessages(existingChat.id);
+        updateUrlWithChatId(existingChat.id);
+        return;
       }
       
-      const newChat = await response.json();
-      setChats(prev => [...prev, newChat]);
-      setActiveChat(newChat.id);
-      setActiveTab('chats');
+      // Create participant objects with strict validation to avoid undefined values
+      const sender = {
+        email: currentUser.email || '',
+        name: currentUser.name || currentUser.email?.split('@')[0] || 'User',
+        uid: currentUser.uid || '',
+      };
       
-      // Update URL with chatId (for direct linking)
+      const recipient = {
+        email: user.email || '',
+        name: user.name || user.email?.split('@')[0] || 'User',
+        uid: user.uid || '',
+      };
+      
+      // Log the participant information to check for any undefined values
+      console.log("Chat participants:", { sender, recipient });
+      
+      // Create new chat - import this from our firestoreChat service
+      const { createChat } = await import('../../services/firestoreChat');
+      
+      const newChat = await createChat([sender, recipient]);
+      
+      console.log("Chat created with ID:", newChat.id);
+      
+      // Add messages array to the new chat if not present
+      if (!newChat.messages) {
+        newChat.messages = [];
+      }
+      
+      // Add the new chat to our state
+      setChats(prev => {
+        // Check if chat already exists in state to avoid duplicates
+        const chatExists = prev.some(c => c.id === newChat.id);
+        if (chatExists) {
+          return prev;
+        }
+        return [...prev, newChat];
+      });
+      
+      // Set the active chat and update URL
+      setActiveChat(newChat.id);
       updateUrlWithChatId(newChat.id);
+      
     } catch (error) {
-      console.error('Error creating chat:', error);
+      console.error('Error starting chat:', error);
+      alert('Failed to start chat. Please try again. Error: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-  }, [API_URL, chats, currentUser?.email, currentUser?.name, fetchChatMessages, setActiveTab, updateUrlWithChatId]);
+  }, [chats, currentUser, fetchChatMessages, updateUrlWithChatId]);
 
   // Send a message
   const sendMessage = useCallback(async () => {
@@ -234,40 +244,44 @@ const ChatPage = () => {
       // Scroll to bottom immediately
       setTimeout(scrollToBottom, 50);
       
-      // Send to server
-      const response = await fetch(`${API_URL}/api/chats/${activeChat}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          sender: currentUser.email,
-          content: messageText,
-          timestamp: timestamp
-        })
-      });
-      
-      if (!response.ok) {
-        console.error(`Failed to send message: ${response.status} ${response.statusText}`);
-        const errorText = await response.text();
-        console.error(`Error response: ${errorText}`);
-        throw new Error('Failed to send message');
+      // Send to Firestore
+      try {
+        await sendFirestoreMessage(activeChat, currentUser.email, messageText);
+        console.log("Message sent successfully to Firestore");
+        
+        // Fetch the latest messages to update the UI with the actual message from server
+        setTimeout(() => {
+          fetchChatMessages(activeChat);
+          // Also refresh chats list to update last message
+          fetchChats();
+        }, 500);
+      } catch (firestoreError) {
+        console.error('Error sending message to Firestore:', firestoreError);
+        
+        // Even if Firestore fails, we've already updated the UI with the temp message
+        // so the user won't notice a disruption. We could add retry logic here.
+        alert('Failed to send message. Please try again.');
+        
+        // Rollback the optimistic update
+        setChats(prev => 
+          prev.map(chat => 
+            chat.id === activeChat 
+              ? { 
+                  ...chat, 
+                  messages: chat.messages.filter(m => m.id !== tempMessage.id)
+                } 
+              : chat
+          )
+        );
+        
+        // Put the message text back in the input
+        setMessage(messageText);
       }
-      
-      const sentMessage = await response.json();
-      console.log(`Message sent successfully with ID: ${sentMessage.id}`);
-      
-      // Fetch the latest messages to update the UI with the actual message from server
-      setTimeout(() => {
-        fetchChatMessages(activeChat);
-        // Also refresh chats list to update last message
-        fetchChats();
-      }, 500);
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error in sendMessage function:', error);
       alert('Failed to send message. Please try again.');
     }
-  }, [API_URL, activeChat, currentUser?.email, fetchChatMessages, fetchChats, message, scrollToBottom]);
+  }, [activeChat, currentUser?.email, fetchChatMessages, fetchChats, message, scrollToBottom]);
 
   // Load chats and users when component mounts
   useEffect(() => {
@@ -296,7 +310,7 @@ const ChatPage = () => {
     scrollToBottom();
   }, [activeChat, scrollToBottom]);
   
-  // Periodically refresh chats and active chat messages
+  // Periodically refresh chats to get new messages
   useEffect(() => {
     if (!currentUser?.email) return;
     
@@ -345,7 +359,7 @@ const ChatPage = () => {
         }
       }
     }
-  }, [chats, fetchChatMessages, setActiveTab]);
+  }, [chats, fetchChatMessages]);
 
   // Get other participant in a chat
   const getOtherParticipant = (chat) => {
@@ -356,7 +370,22 @@ const ChatPage = () => {
   // Get unread messages count
   const getUnreadCount = (chat) => {
     if (!chat.messages) return 0;
-    return chat.messages.filter(msg => !msg.read && msg.sender !== currentUser?.email).length;
+    return chat.messages.filter(msg => {
+      // Message is unread if:
+      // 1. Sender is not the current user
+      const isFromOther = msg.sender !== currentUser?.email;
+      
+      // 2. Message is not marked as read OR
+      //    readBy array doesn't include current user
+      let notReadByUser = true;
+      if (msg.readBy && Array.isArray(msg.readBy)) {
+        notReadByUser = !msg.readBy.includes(currentUser?.email);
+      } else {
+        notReadByUser = !msg.read;
+      }
+      
+      return isFromOther && notReadByUser;
+    }).length;
   };
 
   // Render chat list
@@ -508,7 +537,14 @@ const ChatPage = () => {
     }
 
     const currentChat = chats.find(c => c.id === activeChat);
-    if (!currentChat) return null;
+    if (!currentChat) {
+      return (
+        <div className="text-center py-8">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading chat...</p>
+        </div>
+      );
+    }
     
     const otherParticipant = getOtherParticipant(currentChat);
     const messages = currentChat.messages || [];
@@ -542,7 +578,7 @@ const ChatPage = () => {
           ) : (
             messages.map(msg => (
               <div 
-                key={msg.id} 
+                key={msg.id || `temp-${Date.now()}-${Math.random()}`} 
                 className={`flex ${msg.sender === currentUser?.email ? 'justify-end' : 'justify-start'}`}
               >
                 <div 
@@ -554,7 +590,13 @@ const ChatPage = () => {
                 >
                   <p>{msg.content}</p>
                   <div className={`text-xs mt-1 ${msg.sender === currentUser?.email ? 'text-blue-100' : 'text-gray-500'}`}>
-                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {msg.timestamp ? 
+                      new Date(
+                        msg.timestamp.seconds ? 
+                        msg.timestamp.seconds * 1000 : 
+                        msg.timestamp
+                      ).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 
+                      ''}
                   </div>
                 </div>
               </div>
@@ -569,7 +611,7 @@ const ChatPage = () => {
               placeholder="Type a message..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+              onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
               className="flex-grow"
             />
             <Button 

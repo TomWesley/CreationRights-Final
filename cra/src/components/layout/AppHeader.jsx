@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { useAppContext } from '../../contexts/AppContext';
 import ProfilePhoto from '../shared/ProfilePhoto';
 import NotificationBadge from '../shared/NotificationBadge';
+import { getUnreadMessagesCount } from '../../services/firestoreChat';
 
 const AppHeader = () => {
   const { 
@@ -18,7 +19,6 @@ const AppHeader = () => {
   } = useAppContext();
   
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
 
   // Fetch unread message count
   useEffect(() => {
@@ -26,21 +26,7 @@ const AppHeader = () => {
       if (!currentUser?.email) return;
       
       try {
-        const response = await fetch(`${API_URL}/api/chats/${currentUser.email}`);
-        if (!response.ok) return;
-        
-        const chats = await response.json();
-        let count = 0;
-        
-        // For each chat, count unread messages from other users
-        for (const chat of chats) {
-          if (chat.messages) {
-            count += chat.messages.filter(msg => 
-              !msg.read && msg.sender !== currentUser.email
-            ).length;
-          }
-        }
-        
+        const count = await getUnreadMessagesCount(currentUser.email);
         setUnreadMessageCount(count);
       } catch (error) {
         console.error('Error fetching unread count:', error);

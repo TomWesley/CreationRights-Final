@@ -109,68 +109,50 @@ import {
       console.log('Looking for existing chat with participants:', 
         { emails: participantEmails, uids: participantUIDs });
       
-      // Query chats more efficiently using array-contains query
+      // Get all chats - to ensure we find any existing chat between these users
       const chatsRef = collection(db, 'chats');
       let querySnapshot;
       
       try {
-        // Try searching by the first participant's UID if available
-        if (participantUIDs.length > 0) {
-          console.log(`Querying by first UID: ${participantUIDs[0]}`);
-          const q = query(
-            chatsRef, 
-            where('participantUIDs', 'array-contains', participantUIDs[0])
-          );
-          querySnapshot = await getDocs(q);
-        } else if (participantEmails.length > 0) {
-          // Fallback to query by email
-          console.log(`Querying by first email: ${participantEmails[0]}`);
-          const q = query(
-            chatsRef, 
-            where('participantEmails', 'array-contains', participantEmails[0])
-          );
-          querySnapshot = await getDocs(q);
-        } else {
-          // If we get here, we can't search effectively
-          console.error('No valid search criteria available');
-          return null;
-        }
+        // Get all chats - this is less efficient but more thorough
+        querySnapshot = await getDocs(chatsRef);
+        console.log(`Found ${querySnapshot.size} total chats to check`);
       } catch (queryError) {
         console.error('Error querying Firestore:', queryError);
-        // If query fails, try fetching all chats
-        querySnapshot = await getDocs(chatsRef);
+        throw queryError;
       }
       
-      console.log(`Found ${querySnapshot.size} potential matching chats`);
+      // Sort participants' emails for consistent comparison
+      const sortedEmails = [...participantEmails].sort();
       
-      // Find a chat with the exact same participants
+      // Find a chat with these exact participants
       for (const chatDoc of querySnapshot.docs) {
         const chatData = chatDoc.data();
         
-        // Skip if the chat doesn't have participants
-        if (!chatData.participants || !Array.isArray(chatData.participants)) {
+        // Skip if the chat doesn't have participants or participantEmails
+        if (!chatData.participants || !Array.isArray(chatData.participants) ||
+            !chatData.participantEmails || !Array.isArray(chatData.participantEmails)) {
           continue;
         }
         
-        // Extract emails from chat participants - with error handling
-        const chatParticipantEmails = chatData.participants
-          .map(p => {
-            if (!p || !p.email) return '';
-            return p.email.toLowerCase();
-          })
-          .filter(Boolean); // Remove empty entries
+        // Extract and sort emails from chat for comparison
+        const chatEmails = chatData.participantEmails.map(email => email.toLowerCase()).sort();
         
-        // If we don't have enough valid emails, this is not a match
-        if (chatParticipantEmails.length !== participantEmails.length) {
+        // If the number of participants doesn't match, this isn't our chat
+        if (chatEmails.length !== sortedEmails.length) {
           continue;
         }
         
-        // Check if all participants exist in the chat
-        const allParticipantsExist = participantEmails.every(email => 
-          chatParticipantEmails.includes(email)
-        );
+        // Check if all emails match (both arrays are already sorted)
+        let allMatch = true;
+        for (let i = 0; i < sortedEmails.length; i++) {
+          if (sortedEmails[i] !== chatEmails[i]) {
+            allMatch = false;
+            break;
+          }
+        }
         
-        if (allParticipantsExist) {
+        if (allMatch) {
           console.log(`Found existing chat: ${chatDoc.id}`);
           return {
             id: chatDoc.id,
@@ -183,7 +165,7 @@ import {
       return null;
     } catch (error) {
       console.error('Error finding existing chat:', error);
-      return null;
+      throw error;
     }
   };
   
@@ -205,23 +187,11 @@ import {
       const chatsRef = collection(db, 'chats');
       let querySnapshot;
       
-      if (userUID) {
-        // Use more efficient query with UID if available
-        const q = query(
-          chatsRef, 
-          where('participantUIDs', 'array-contains', userUID)
-        );
-        querySnapshot = await getDocs(q);
-      } else {
-        // Fall back to email-based query
-        const q = query(
-          chatsRef, 
-          where('participantEmails', 'array-contains', userEmailLower)
-        );
-        querySnapshot = await getDocs(q);
-      }
+      // Get all chats - this is less efficient but ensures we find all chats
+      // where this user is involved, even if the array-contains query doesn't work
+      querySnapshot = await getDocs(chatsRef);
       
-      console.log(`Found ${querySnapshot.size} chats for user`);
+      console.log(`Found ${querySnapshot.size} total chats to check`);
       
       const userChats = [];
       
@@ -230,26 +200,45 @@ import {
         const chatData = chatDoc.data();
         
         // Double-check that the user is a participant (for backward compatibility)
-        if (chatData.participants && Array.isArray(chatData.participants)) {
-          const isParticipant = chatData.participants.some(
+        // Check participantEmails first (most reliable) - case insensitive
+        let isParticipant = false;
+        
+        if (chatData.participantEmails && Array.isArray(chatData.participantEmails)) {
+          isParticipant = chatData.participantEmails.some(
+            email => email.toLowerCase() === userEmailLower
+          );
+        }
+        
+        // If not found in emails, check participants array
+        if (!isParticipant && chatData.participants && Array.isArray(chatData.participants)) {
+          isParticipant = chatData.participants.some(
             p => p.email && p.email.toLowerCase() === userEmailLower
           );
+        }
+        
+        // If not found in participants, check participantUIDs if we have a UID
+        if (!isParticipant && !userUID && chatData.participantUIDs && Array.isArray(chatData.participantUIDs)) {
+          isParticipant = chatData.participantUIDs.includes(userUID);
+        }
+        
+        if (isParticipant) {
+          console.log(`User is participant in chat: ${chatDoc.id}`);
           
-          if (isParticipant) {
-            // Get messages for this chat
-            const messages = await getChatMessages(chatDoc.id);
-            
-            // Construct chat object
-            const chat = {
-              id: chatDoc.id,
-              ...chatData,
-              messages
-            };
-            
-            userChats.push(chat);
-          }
+          // Get messages for this chat
+          const messages = await getChatMessages(chatDoc.id);
+          
+          // Construct chat object
+          const chat = {
+            id: chatDoc.id,
+            ...chatData,
+            messages
+          };
+          
+          userChats.push(chat);
         }
       }
+      
+      console.log(`Found ${userChats.length} chats for user ${userEmailLower}`);
       
       // Sort chats by last message time (most recent first)
       userChats.sort((a, b) => {
@@ -292,30 +281,82 @@ import {
       
       // Get messages sorted by timestamp
       const messagesRef = collection(db, 'chats', chatId, 'messages');
-      const q = query(messagesRef, orderBy('timestamp', 'asc'));
-      const querySnapshot = await getDocs(q);
       
-      console.log(`Found ${querySnapshot.size} messages for chat ${chatId}`);
-      
-      const messages = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
+      try {
+        // Try with ordering by timestamp first
+        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        const querySnapshot = await getDocs(q);
         
-        // Format the timestamp - Handle both server timestamps and string timestamps
-        let formattedTimestamp = data.timestamp;
-        if (data.timestamp && data.timestamp.toDate) {
-          // Convert Firestore timestamp to JS Date
-          formattedTimestamp = data.timestamp.toDate();
+        console.log(`Found ${querySnapshot.size} messages for chat ${chatId}`);
+        
+        const messages = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          // Format the timestamp - Handle both server timestamps and string timestamps
+          let formattedTimestamp = data.timestamp;
+          if (data.timestamp && typeof data.timestamp.toDate === 'function') {
+            // Convert Firestore timestamp to JS Date
+            formattedTimestamp = data.timestamp.toDate();
+          }
+          
+          messages.push({
+            id: doc.id,
+            ...data,
+            timestamp: formattedTimestamp
+          });
+        });
+        
+        // Log message senders for debugging
+        if (messages.length > 0) {
+          console.log(`Message senders:`, messages.map(m => m.sender));
         }
         
-        messages.push({
-          id: doc.id,
-          ...data,
-          timestamp: formattedTimestamp
+        return messages;
+      } catch (orderError) {
+        console.error(`Error querying messages with ordering: ${orderError}`);
+        
+        // Fallback to get all messages without ordering
+        const fallbackSnapshot = await getDocs(messagesRef);
+        
+        console.log(`Fallback found ${fallbackSnapshot.size} messages for chat ${chatId}`);
+        
+        const messages = [];
+        fallbackSnapshot.forEach((doc) => {
+          messages.push({
+            id: doc.id,
+            ...doc.data()
+          });
         });
-      });
-      
-      return messages;
+        
+        // Sort manually by timestamp if possible
+        try {
+          messages.sort((a, b) => {
+            // Try to extract timestamp values
+            const getTime = (msg) => {
+              if (msg.timestamp && typeof msg.timestamp.toDate === 'function') {
+                return msg.timestamp.toDate().getTime();
+              }
+              if (msg.timestamp && msg.timestamp.seconds) {
+                return msg.timestamp.seconds * 1000;
+              }
+              if (msg.timestamp) {
+                const d = new Date(msg.timestamp);
+                if (!isNaN(d.getTime())) {
+                  return d.getTime();
+                }
+              }
+              return 0;
+            };
+            
+            return getTime(a) - getTime(b);
+          });
+        } catch (sortError) {
+          console.error('Error sorting messages:', sortError);
+        }
+        
+        return messages;
+      }
     } catch (error) {
       console.error(`Error getting messages for chat ${chatId}:`, error);
       return [];
@@ -337,13 +378,19 @@ import {
       
       console.log(`Sending message to chat ${chatId} from ${sender}`);
       
-      // First check if the chat exists
+      // First check if the chat exists and get its data
       const chatRef = doc(db, 'chats', chatId);
       const chatSnap = await getDoc(chatRef);
       
       if (!chatSnap.exists()) {
         throw new Error(`Chat with ID ${chatId} not found`);
       }
+      
+      const chatData = chatSnap.data();
+      console.log(`Chat data:`, {
+        participants: chatData.participants?.length || 0,
+        participantEmails: chatData.participantEmails || []
+      });
       
       // Create message object
       const messageData = {
@@ -354,7 +401,10 @@ import {
         readBy: [sender] // Initialize with sender as having read the message
       };
       
-      console.log(`Adding message to chat ${chatId}...`, messageData);
+      console.log(`Adding message to chat ${chatId}...`, {
+        content: messageData.content,
+        sender: messageData.sender
+      });
       
       // Add message to the chat's messages subcollection
       const messagesRef = collection(db, 'chats', chatId, 'messages');
@@ -382,7 +432,7 @@ import {
         ...messageDoc.data()
       };
       
-      console.log(`Returning message with ID: ${messageRef.id}`);
+      console.log(`Successfully sent message: ${messageRef.id}`);
       return messageWithId;
     } catch (error) {
       console.error('Error sending message:', error);

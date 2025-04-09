@@ -191,25 +191,32 @@ const ArtistsList = () => {
     try {
       console.log("Starting chat with artist:", artist.name);
       
-      // Create a new chat with the artist in Firestore
-      const participants = [
-        { 
-          email: currentUser.email, 
-          name: currentUser.name || currentUser.email.split('@')[0],
-          uid: currentUser.uid 
-        },
-        { 
-          email: artist.email, 
-          name: artist.name || artist.email.split('@')[0],
-          uid: artist.uid
-        }
-      ];
+      // Create sanitized participant objects to avoid undefined values
+      const sender = {
+        email: currentUser.email || '',
+        name: currentUser.name || currentUser.email?.split('@')[0] || 'User',
+        uid: currentUser.uid || '',
+      };
       
-      const chatData = await createChat(participants);
+      const recipient = {
+        email: artist.email || '',
+        name: artist.name || artist.email?.split('@')[0] || 'User',
+        uid: artist.uid || '',
+      };
+      
+      // Log the participant information
+      console.log("Chat participants:", { sender, recipient });
+      
+      // Create a new chat with the artist in Firestore
+      const chatData = await createChat([sender, recipient]);
       console.log("Chat created with ID:", chatData.id);
       
       // Store the chat ID in sessionStorage for the chat page to use
       sessionStorage.setItem('activeChat', chatData.id);
+      
+      // Also store a flag so the chat page knows we came from the Artists list
+      // and not to auto-switch to the conversations tab
+      sessionStorage.setItem('fromArtistsList', 'true');
       
       // Navigate to chat page
       console.log(`Navigating to messages with chatId: ${chatData.id}`);
@@ -218,7 +225,7 @@ const ArtistsList = () => {
       
     } catch (error) {
       console.error('Error starting chat:', error);
-      alert('Failed to start chat. Please try again.');
+      alert('Failed to start chat. Please try again. Error: ' + error.message);
     }
   };
 

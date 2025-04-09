@@ -1,172 +1,177 @@
-// Improve the ProfilePhotoUpload.jsx component
-import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, X } from 'lucide-react';
+// src/components/shared/ProfilePhotoUpload.jsx
+import React, { useState, useRef } from 'react';
+import { Camera, X, Upload, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
-import { getProxiedImageUrl } from '../../services/fileUpload';
+import ProfilePhoto from './ProfilePhoto';
+import { uploadProfilePhoto, deleteProfilePhoto } from '../../services/ProfilePhotoService';
 import { useAppContext } from '../../contexts/AppContext';
 
-const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange }) => {
+/**
+ * Component for uploading and managing a user's profile photo
+ * @param {Object} props
+ * @param {string} props.currentPhoto - Current photo URL
+ * @param {function} props.onPhotoChange - Callback when photo changes
+ * @param {string} props.photoPath - Storage path for current photo (for deletion)
+ */
+const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
   const { currentUser } = useAppContext();
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(currentPhoto || '');
   const fileInputRef = useRef(null);
   
-  // Initialize preview when component mounts or currentPhoto changes
-  useEffect(() => {
-    if (currentPhoto) {
-      // Use proxied URL for GCS images
-      const proxiedUrl = currentUser && currentUser.email ? 
-        getProxiedImageUrl(currentPhoto, currentUser.email) : currentPhoto;
-      setPreviewUrl(proxiedUrl);
-    }
+  // Handle file selection
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
     
-    // Cleanup function to avoid memory leaks
-    return () => {
-      if (previewUrl && previewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [currentPhoto, currentUser]);
-
-  // Handle file selection via button
-  const handleFileSelect = () => {
-    fileInputRef.current.click();
-  };
-
-  // Handle file upload
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      handleFile(file);
-    }
-  };
-
-  // Handle file drop
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  // Handle file processing
-  const handleFile = (file) => {
-    // Check if it's an image file
+    // Check if file is an image
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file (PNG, JPG, etc.)');
+      alert('Please select an image file (JPEG, PNG, etc.)');
       return;
     }
     
-    // Create preview URL
-    const url = URL.createObjectURL(file);
+    // Display preview immediately for better UX
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
     
-    // If there was a previous preview, revoke it to prevent memory leaks
-    if (previewUrl && previewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(previewUrl);
+    // Start upload if we have a user
+    if (currentUser?.uid) {
+      try {
+        setIsUploading(true);
+        
+        // Upload to Google Cloud Storage via our backend API
+        const photoUrl = await uploadProfilePhoto(currentUser.uid, file);
+        
+        // Call the callback with the new URL
+        if (onPhotoChange) {
+          onPhotoChange(file, photoUrl);
+        }
+        
+        // Clean up object URL
+        URL.revokeObjectURL(objectUrl);
+        
+        // Update preview to real URL
+        setPreviewUrl(photoUrl);
+      } catch (error) {
+        console.error('Error uploading photo:', error);
+        alert('Failed to upload photo. Please try again. Error: ' + error.message);
+        
+        // Revert to previous photo on error
+        setPreviewUrl(currentPhoto || '');
+      } finally {
+        setIsUploading(false);
+      }
     }
-    
-    setPreviewUrl(url);
-    
-    // Call the callback with the new file
-    onPhotoChange(file, url);
-    
-    console.log('Photo selected:', { file, url });
   };
-
-  // Handle removing the photo
-  const handleRemovePhoto = () => {
-    if (previewUrl && previewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(previewUrl);
+  
+  // Trigger file input click
+  const handleUploadClick = () => {
+    fileInputRef.current.click();
+  };
+  
+  // Handle photo deletion
+  const handleDeletePhoto = async () => {
+    if (!currentUser?.uid || !photoPath) return;
+    
+    if (window.confirm('Are you sure you want to remove your profile photo?')) {
+      try {
+        setIsDeleting(true);
+        
+        // Delete from storage
+        await deleteProfilePhoto(currentUser.uid, photoPath);
+        
+        // Clear preview
+        setPreviewUrl('');
+        
+        // Call the callback
+        if (onPhotoChange) {
+          onPhotoChange(null, null);
+        }
+      } catch (error) {
+        console.error('Error deleting photo:', error);
+        alert('Failed to delete photo. Please try again.');
+      } finally {
+        setIsDeleting(false);
+      }
     }
-    
-    setPreviewUrl(null);
-    onPhotoChange(null, null);
-    
-    // Clear the file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
-
-  // Handle drag events
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
+  
   return (
-    <div className="profile-photo-upload">
-      {!previewUrl ? (
-        <div 
-          className={`w-40 h-40 rounded-full border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-colors ${
-            isDragging 
-              ? 'border-blue-500 bg-blue-50' 
-              : 'border-gray-300 hover:border-gray-400'
-          }`}
-          onClick={handleFileSelect}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-        >
-          <Camera className="h-8 w-8 text-gray-400 mb-2" />
-          <p className="text-sm text-gray-500">Add Photo</p>
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
+    <div className="flex flex-col items-center">
+      <div className="relative">
+        {/* Profile photo display */}
+        <ProfilePhoto 
+          email={currentUser?.email}
+          name={currentUser?.name}
+          photoUrl={previewUrl}
+          size="xl"
+        />
+        
+        {/* Overlay buttons for actions */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black bg-opacity-40 rounded-full">
+          {isUploading || isDeleting ? (
+            <Loader2 className="h-6 w-6 text-white animate-spin" />
+          ) : (
+            <>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                className="rounded-full p-1 bg-white bg-opacity-80 hover:bg-opacity-100"
+                onClick={handleUploadClick}
+              >
+                <Camera className="h-4 w-4 text-gray-700" />
+              </Button>
+              
+              {previewUrl && (
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  className="rounded-full p-1 bg-white bg-opacity-80 hover:bg-opacity-100 ml-2"
+                  onClick={handleDeletePhoto}
+                >
+                  <X className="h-4 w-4 text-gray-700" />
+                </Button>
+              )}
+            </>
+          )}
         </div>
-      ) : (
-        <div className="relative">
-          <img 
-            src={previewUrl} 
-            alt="Profile" 
-            className="w-40 h-40 rounded-full object-cover border border-gray-200"
-            onError={(e) => {
-              console.error("Profile image failed to load:", previewUrl);
-              // If the image fails to load, show a placeholder
-              e.target.style.display = 'none';
-              const parent = e.target.parentElement;
-              const placeholder = document.createElement('div');
-              placeholder.className = "w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center";
-              placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-8 w-8 text-gray-400"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
-              parent.appendChild(placeholder);
-            }}
-          />
-          <button 
-            type="button"
-            className="absolute bottom-0 right-0 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors"
-            onClick={handleRemovePhoto}
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <button 
-            type="button"
-            className="absolute bottom-0 left-0 bg-blue-500 text-white p-1 rounded-full hover:bg-blue-600 transition-colors"
-            onClick={handleFileSelect}
-          >
-            <Camera className="h-4 w-4" />
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
-        </div>
-      )}
-      <p className="text-xs text-gray-500 mt-2 text-center">
-        Click or drag & drop to upload
+      </div>
+      
+      {/* Label below photo */}
+      <p className="text-xs text-gray-500 mt-2">
+        {previewUrl ? 'Change photo' : 'Add profile photo'}
       </p>
+      
+      {/* Hidden file input */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        accept="image/*" 
+        className="hidden" 
+        onChange={handleFileChange}
+      />
+      
+      {/* Explicit upload button (alternative to overlay) */}
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="mt-3"
+        onClick={handleUploadClick}
+        disabled={isUploading || isDeleting}
+      >
+        {isUploading ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Uploading...
+          </>
+        ) : (
+          <>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Photo
+          </>
+        )}
+      </Button>
     </div>
   );
 };

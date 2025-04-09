@@ -8,7 +8,6 @@ const path = require('path');
 const dotenv = require('dotenv');
 const multer = require('multer');
 const fs = require('fs');
-const instagramService = require('./services/instagramService');
 const uploadHandler = require('./routes/uploadHandler');
 const stripeRoutes = require('./routes/stripeRoutes');
 
@@ -108,63 +107,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
-// Instagram API endpoint
-// Add Instagram API endpoint
-// Instagram API endpoint using the existing Apify integration
-app.get('/api/instagram/:username', async (req, res) => {
-  try {
-    // Set JSON response type explicitly to avoid HTML responses
-    res.setHeader('Content-Type', 'application/json');
-    
-    const { username } = req.params;
-    
-    // Normalize the username (remove @ if present)
-    const normalizedUsername = username.startsWith('@') ? username.substring(1) : username;
-    
-    console.log(`Processing Instagram request for username: ${normalizedUsername}`);
-    
-    // Set a longer timeout for the request to avoid abrupt disconnections
-    req.setTimeout(60000); // 1 minute timeout (reduced from 2 minutes)
-    
-    // Explicitly wrap the Instagram service call in a try-catch block
-    try {
-      // Use the existing instagramService that leverages Apify
-      const profileData = await instagramService.fetchInstagramProfile(normalizedUsername);
-      
-      // Validate the response to ensure we have profile data
-      if (!profileData || typeof profileData !== 'object') {
-        return res.status(404).json({
-          error: 'Profile not found',
-          message: 'No Instagram profile found for this username. The account may not exist or may be private.'
-        });
-      }
-      
-      console.log(`Successfully fetched Instagram profile for ${normalizedUsername}`);
-      
-      // Return the profile data as JSON
-      return res.json(profileData);
-    } catch (fetchError) {
-      console.error('Error fetching Instagram profile:', fetchError);
-      
-      // Return a proper JSON error response
-      return res.status(500).json({
-        error: 'Instagram API Error',
-        message: fetchError.message || 'Failed to fetch Instagram profile. Please try again later.'
-      });
-    }
-  } catch (error) {
-    console.error('Error handling Instagram request:', error);
-    
-    // Ensure we always return JSON, even for unexpected errors
-    return res.status(500).json({ 
-      error: 'Unexpected Error',
-      message: error.message || 'An unexpected error occurred while processing your request. Please try again later.'
-    });
-  }
-});
-
-// Add Instagram post conversion endpoint
 
 
 // Add this to server/index.js
@@ -289,83 +231,7 @@ app.listen(PORT, () => {
 // User data endpoints
 // Update this in server/index.js
 
-app.post('/api/admin/fix-user-folders', async (req, res) => {
-  try {
-    // Check for admin authorization
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    
-    const token = authHeader.split(' ')[1];
-    // Use a simple token validation for admin access
-    // In production, use a proper authentication system
-    if (token !== process.env.ADMIN_TOKEN) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    
-    if (!storage) {
-      return res.status(500).json({ error: 'Storage not initialized' });
-    }
-    
-    // Get all users by listing user profile directories
-    const bucket = storage.bucket(BUCKET_NAME);
-    const [files] = await bucket.getFiles({ prefix: 'users/' });
-    
-    // Extract unique user IDs from file paths
-    const userIds = new Set();
-    files.forEach(file => {
-      const pathParts = file.name.split('/');
-      if (pathParts.length >= 2) {
-        userIds.add(pathParts[1]);
-      }
-    });
-    
-    console.log(`Found ${userIds.size} users. Fixing folder structure...`);
-    
-    // Process each user
-    const results = {
-      totalUsers: userIds.size,
-      processed: 0,
-      succeeded: 0,
-      failed: 0,
-      errors: []
-    };
-    
-    for (const userId of userIds) {
-      try {
-        results.processed++;
-        
-        // Skip empty user IDs and special folders
-        if (!userId || userId === '.keep' || userId.startsWith('.')) {
-          continue;
-        }
-        
-        // Ensure the user folder structure
-        const success = await ensureUserFolderStructure(userId);
-        
-        // Ensure creations metadata
-        if (success) {
-          await ensureCreationsMetadata(userId);
-          results.succeeded++;
-        } else {
-          results.failed++;
-          results.errors.push(`Failed to fix structure for user ${userId}`);
-        }
-      } catch (userError) {
-        results.failed++;
-        results.errors.push(`Error processing user ${userId}: ${userError.message}`);
-        console.error(`Error fixing user ${userId}:`, userError);
-      }
-    }
-    
-    console.log(`Fixed folder structure for ${results.succeeded} users`);
-    res.status(200).json(results);
-  } catch (error) {
-    console.error('Error fixing user folders:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 app.post('/api/users/:userId', async (req, res) => {
   try {
@@ -470,31 +336,7 @@ app.post('/api/users/:userId/folders', async (req, res) => {
   }
 });
 
-app.get('/api/users/:userId/folders', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    const folders = await handleStorageOperation(async () => {
-      const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`users/${userId}/profile/folders.json`);
-      
-      const [exists] = await file.exists();
-      if (!exists) return null;
-      
-      const [content] = await file.download();
-      return JSON.parse(content.toString());
-    });
-    
-    if (!folders) {
-      return res.status(404).json({ error: 'Folders not found' });
-    }
-    
-    res.status(200).json(folders);
-  } catch (error) {
-    console.error('Error loading folders:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+
 
 // For thumbnails and previews for video/audio conten
 
@@ -701,7 +543,7 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         const bucket = storage.bucket(BUCKET_NAME);
         
         // Use the correct file path for profile photos that matches where you're looking for them
-        const gcsFilePath = `users/${userId}/profile/photo${path.extname(file.originalname)}`;
+        const gcsFilePath = `ProfilePhotos/photo${path.extname(file.originalname)}`;
         console.log(`Uploading profile photo to: ${gcsFilePath}`);
         
         // Create a file in the bucket
@@ -737,26 +579,6 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         // Wait for the stream to finish
         await streamPromise;
         
-        // Update user data with the new profile photo URL
-        try {
-          const userInfoFile = bucket.file(`users/${userId}/profile/info.json`);
-          const [exists] = await userInfoFile.exists();
-          
-          if (exists) {
-            const [content] = await userInfoFile.download();
-            const userData = JSON.parse(content.toString());
-            
-            // Update the photo URL
-            userData.photoUrl = fileInfo.gcsUrl;
-            
-            // Save the updated user data
-            await userInfoFile.save(JSON.stringify(userData), {
-              contentType: 'application/json'
-            });
-          }
-        } catch (error) {
-          console.error('Error updating user data with profile photo:', error);
-        }
       } catch (gcsError) {
         console.error('Error uploading profile photo to GCS:', gcsError);
         return res.status(500).json({ error: 'Failed to upload to cloud storage: ' + gcsError.message });
@@ -776,6 +598,65 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
   }
 });
 
+// Delete user profile photo
+app.delete('/api/users/:userId/profile-photo', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log(`Deleting profile photo for user ${userId}...`);
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // Check for profile photo with various extensions
+    const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    let photoPath = null;
+    let photoFile = null;
+    
+    for (const ext of extensions) {
+      // This path should match where the profile photo is uploaded to
+      const path = `ProfilePhotos/photo.${ext}`;
+      console.log(`Checking for profile photo at: ${path}`);
+      
+      const file = bucket.file(path);
+      const [exists] = await file.exists();
+      
+      if (exists) {
+        photoPath = path;
+        photoFile = file;
+        console.log(`Found profile photo at: ${path}`);
+        break;
+      }
+    }
+    
+    if (!photoPath) {
+      console.log(`No profile photo found for user ${userId}`);
+      return res.status(404).json({ 
+        error: 'Profile photo not found',
+        message: 'No profile photo has been uploaded for this user'
+      });
+    }
+    
+    // Delete the photo
+    try {
+      await photoFile.delete();
+      console.log(`Deleted profile photo at: ${photoPath}`);
+      
+      res.status(200).json({ success: true, message: 'Profile photo deleted' });
+    } catch (deleteError) {
+      console.error('Error deleting profile photo:', deleteError);
+      res.status(500).json({ 
+        error: 'Error deleting profile photo',
+        message: deleteError.message
+      });
+    }
+  } catch (error) {
+    console.error('Error handling profile photo deletion:', error);
+    res.status(500).json({ 
+      error: 'Error handling profile photo deletion',
+      message: error.message
+    });
+  }
+});
+
 // Get user profile photo - this is the missing endpoint
 app.get('/api/users/:userId/profile-photo', async (req, res) => {
   try {
@@ -791,7 +672,7 @@ app.get('/api/users/:userId/profile-photo', async (req, res) => {
     
     for (const ext of extensions) {
       // This path should match where the profile photo is uploaded to
-      const path = `users/${userId}/profile/photo.${ext}`;
+      const path = `ProfilePhotos/photo.${ext}`;
       console.log(`Checking for profile photo at: ${path}`);
       
       const file = bucket.file(path);
@@ -1489,40 +1370,6 @@ app.post('/api/chats/:userId/:chatId/read', async (req, res) => {
   }
 });
 
-// Add these endpoints to server/index.js (or update if they already exist)
-
-// Get Instagram profile data
-app.get('/api/users/:userId/social-profiles/instagram', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const sanitizedUserId = sanitizeEmail(userId);
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    const filePath = `users/${sanitizedUserId}/profile/social/instagram.json`;
-    
-    // Check if file exists
-    const [exists] = await bucket.file(filePath).exists();
-    if (!exists) {
-      return res.status(404).json({ error: 'Instagram profile not found' });
-    }
-    
-    // Get the profile data
-    const [content] = await bucket.file(filePath).download();
-    let profileData;
-    
-    try {
-      profileData = JSON.parse(content.toString());
-    } catch (parseError) {
-      console.error('Error parsing Instagram profile data:', parseError);
-      return res.status(500).json({ error: 'Invalid profile data format' });
-    }
-    
-    res.status(200).json(profileData);
-  } catch (error) {
-    console.error('Error getting Instagram profile:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 /**
  * Ensures a user has the proper folder structure in Google Cloud Storage
  * @param {string} userId - The sanitized user ID
@@ -1736,88 +1583,3 @@ app.get('/api/users/:userId/diagnostics/folders', async (req, res) => {
   }
 });
 
-// Save Instagram profile data
-app.post('/api/users/:userId/social-profiles/instagram', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const profileData = req.body;
-    
-    if (!profileData || !profileData.username) {
-      return res.status(400).json({ error: 'Invalid profile data - username is required' });
-    }
-    
-    const sanitizedUserId = sanitizeEmail(userId);
-    
-    // Save to Google Cloud Storage
-    const bucket = storage.bucket(BUCKET_NAME);
-    
-    // Create directory structure if it doesn't exist
-    try {
-      await bucket.file(`users/${sanitizedUserId}/profile/social/.keep`).save('');
-    } catch (dirError) {
-      console.error(`Error ensuring directory structure: ${dirError}`);
-      // Continue anyway as the file save might still work
-    }
-    
-    // Add a timestamp to the data
-    const dataToSave = {
-      ...profileData,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    // Save the profile data
-    const filePath = `users/${sanitizedUserId}/profile/social/instagram.json`;
-    await bucket.file(filePath).save(JSON.stringify(dataToSave), {
-      contentType: 'application/json',
-      metadata: {
-        cacheControl: 'private, max-age=0'
-      }
-    });
-    
-    // Update the user's main profile data to include reference to social profiles
-    try {
-      const userInfoFile = bucket.file(`users/${sanitizedUserId}/profile/info.json`);
-      const [exists] = await userInfoFile.exists();
-      
-      if (exists) {
-        const [content] = await userInfoFile.download();
-        let userData;
-        
-        try {
-          userData = JSON.parse(content.toString());
-        } catch (parseError) {
-          console.error('Error parsing user data:', parseError);
-          userData = {}; // Start with empty object if parse fails
-        }
-        
-        // Add social profiles data to user info
-        if (!userData.socialProfiles) {
-          userData.socialProfiles = {};
-        }
-        
-        // Just store a reference, not the full data
-        userData.socialProfiles.instagram = {
-          username: profileData.username,
-          lastUpdated: new Date().toISOString()
-        };
-        
-        // Save updated user info
-        await userInfoFile.save(JSON.stringify(userData), {
-          contentType: 'application/json'
-        });
-      }
-    } catch (userUpdateError) {
-      console.error('Error updating user info with Instagram profile reference:', userUpdateError);
-      // Continue as this is non-critical
-    }
-    
-    // Return success with the saved data
-    res.status(200).json({
-      success: true,
-      data: dataToSave
-    });
-  } catch (error) {
-    console.error('Error saving Instagram profile:', error);
-    res.status(500).json({ error: error.message });
-  }
-});

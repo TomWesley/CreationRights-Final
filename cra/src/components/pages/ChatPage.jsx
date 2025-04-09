@@ -1,5 +1,37 @@
 // Helper function to format timestamps consistently
-// src/components/pages/ChatPage.jsx
+const formatTimestamp = (timestamp) => {
+  try {
+    let dateObj;
+    
+    // Handle different timestamp formats
+    if (timestamp && typeof timestamp === 'object' && timestamp.toDate) {
+      // Firestore timestamp
+      dateObj = timestamp.toDate();
+    } else if (timestamp && timestamp.seconds) {
+      // Firestore timestamp in seconds
+      dateObj = new Date(timestamp.seconds * 1000);
+    } else if (timestamp && typeof timestamp === 'string') {
+      // ISO string
+      dateObj = new Date(timestamp);
+    } else if (timestamp && typeof timestamp === 'number') {
+      // Unix timestamp
+      dateObj = new Date(timestamp);
+    } else {
+      return '';
+    }
+    
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) {
+      console.log("Invalid timestamp:", timestamp);
+      return '';
+    }
+    
+    return dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  } catch (error) {
+    console.error("Error formatting timestamp:", error, timestamp);
+    return '';
+  }
+};// src/components/pages/ChatPage.jsx
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, User, ArrowLeft, Users, Search } from 'lucide-react';
@@ -50,39 +82,6 @@ const markMessagesAsRead = useCallback(async (chatId) => {
   }
 }, [currentUser?.email]);
 
-const formatTimestamp = (timestamp) => {
-  try {
-    let dateObj;
-    
-    // Handle different timestamp formats
-    if (timestamp && typeof timestamp === 'object' && timestamp.toDate) {
-      // Firestore timestamp
-      dateObj = timestamp.toDate();
-    } else if (timestamp && timestamp.seconds) {
-      // Firestore timestamp in seconds
-      dateObj = new Date(timestamp.seconds * 1000);
-    } else if (timestamp && typeof timestamp === 'string') {
-      // ISO string
-      dateObj = new Date(timestamp);
-    } else if (timestamp && typeof timestamp === 'number') {
-      // Unix timestamp
-      dateObj = new Date(timestamp);
-    } else {
-      return '';
-    }
-    
-    // Check if the date is valid
-    if (isNaN(dateObj.getTime())) {
-      console.log("Invalid timestamp:", timestamp);
-      return '';
-    }
-    
-    return dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-  } catch (error) {
-    console.error("Error formatting timestamp:", error, timestamp);
-    return '';
-  }
-};
 // Define fetchChatMessages with useCallback
 const fetchChatMessages = useCallback(async (chatId) => {
   if (!currentUser?.email || !chatId) return;
@@ -677,11 +676,25 @@ const renderChatMessages = () => {
                   'bg-gray-200 text-gray-800'
                 }`}
               >
-                <p>{msg.content}</p>
-                <div className={`text-xs mt-1 ${msg.sender === currentUser?.email ? 'text-blue-100' : 'text-gray-500'}`}>
-                  {msg.timestamp ? 
-                    formatTimestamp(msg.timestamp) : 
-                    ''}
+                <div className="flex items-start">
+                  {msg.sender !== currentUser?.email && (
+                    <div className="mr-2 mt-1">
+                      <ProfilePhoto 
+                        email={msg.sender}
+                        size="xs"
+                        // Look up the sender in participants to find their photoUrl
+                        photoUrl={currentChat.participants?.find(p => p.email === msg.sender)?.photoUrl || null}
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <p>{msg.content}</p>
+                    <div className={`text-xs mt-1 ${msg.sender === currentUser?.email ? 'text-blue-100' : 'text-gray-500'}`}>
+                      {msg.timestamp ? 
+                        formatTimestamp(msg.timestamp) : 
+                        ''}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

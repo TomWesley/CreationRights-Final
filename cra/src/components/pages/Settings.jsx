@@ -8,12 +8,10 @@ import { Save, Check, Loader2, X, Plus } from 'lucide-react';
 import ProfilePhotoUpload from '../shared/ProfilePhotoUpload';
 import { useAppContext } from '../../contexts/AppContext';
 import { updateUserProfile } from '../../services/firebase';
-import { uploadProfilePhoto } from '../../services/api'; // Keep using existing GCS upload
 
 const Settings = () => {
   const { currentUser, updateUserProfile: updateUserInContext } = useAppContext();
   const [profileSaved, setProfileSaved] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -25,12 +23,12 @@ const Settings = () => {
     website: '',
     location: '',
     photoUrl: null,
+    photoPath: null,
     contentTypes: [],
     status: 'active',
     socialLinks: {}
   });
   
-  const [photoFile, setPhotoFile] = useState(null);
   const [newContentType, setNewContentType] = useState('');
 
   // Content type options
@@ -56,6 +54,7 @@ const Settings = () => {
           website: currentUser?.website || '',
           location: currentUser?.location || '',
           photoUrl: currentUser?.photoUrl || null,
+          photoPath: currentUser?.photoPath || null,
           contentTypes: currentUser?.contentTypes || [],
           status: currentUser?.status || 'active',
           socialLinks: currentUser?.socialLinks || {}
@@ -81,13 +80,12 @@ const Settings = () => {
   };
 
   // Handle photo change
-  const handlePhotoChange = (file, url) => {
-    setPhotoFile(file);
+  const handlePhotoChange = (file, photoUrl) => {
     setProfileData(prev => ({
       ...prev,
-      photoUrl: url
+      photoUrl: photoUrl
     }));
-    console.log('Photo changed:', { file, url });
+    console.log('Photo changed:', { file, photoUrl });
   };
 
   // Handle adding a content type
@@ -125,24 +123,8 @@ const Settings = () => {
     e.preventDefault();
     
     setIsLoading(true);
-    setIsUploading(true);
     
     try {
-      let photoUrlToSave = profileData.photoUrl;
-      
-      // If there's a new photo file, upload it using existing GCS method
-      if (photoFile) {
-        try {
-          console.log("Uploading profile photo to Cloud Storage...");
-          const uploadResult = await uploadProfilePhoto(currentUser.email, photoFile);
-          photoUrlToSave = uploadResult.file?.gcsUrl || uploadResult.file?.url || photoUrlToSave;
-          console.log('Photo uploaded successfully:', photoUrlToSave);
-        } catch (photoError) {
-          console.error('Error uploading photo:', photoError);
-          // Continue with the local URL if upload fails
-        }
-      }
-      
       // Create a complete user data object with all profile fields
       const completeUserData = {
         // Basic user info
@@ -154,7 +136,8 @@ const Settings = () => {
         bio: profileData.bio || '',
         website: profileData.website || '',
         location: profileData.location || '',
-        photoUrl: photoUrlToSave || null,
+        photoUrl: profileData.photoUrl || null,
+        photoPath: profileData.photoPath || null,
         contentTypes: profileData.contentTypes || [],
         socialLinks: profileData.socialLinks || {},
         
@@ -185,7 +168,6 @@ const Settings = () => {
       alert('Failed to update profile. Please try again. Error: ' + error.message);
     } finally {
       setIsLoading(false);
-      setIsUploading(false);
     }
   };
 
@@ -216,6 +198,7 @@ const Settings = () => {
                   <div className="flex-shrink-0">
                     <ProfilePhotoUpload 
                       currentPhoto={profileData.photoUrl}
+                      photoPath={profileData.photoPath}
                       onPhotoChange={handlePhotoChange}
                     />
                   </div>
@@ -373,8 +356,8 @@ const Settings = () => {
                 </div>
                 
                 <div className="flex items-center justify-between">
-                  <Button type="submit" className="save-profile-button" disabled={isUploading || isLoading}>
-                    {isUploading ? (
+                  <Button type="submit" className="save-profile-button" disabled={isLoading}>
+                    {isLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Saving...

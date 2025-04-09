@@ -1,85 +1,90 @@
 // src/components/shared/ProfilePhoto.jsx
-
 import React, { useState, useEffect } from 'react';
-import { User } from 'lucide-react';
-import { getDirectProfilePhotoUrl } from '../../services/api';
+import { getDefaultAvatarUrl } from '../../services/ProfilePhotoService';
 
 /**
- * Reusable component for displaying user profile photos
+ * Component to display a user's profile photo or default avatar
  * @param {Object} props
- * @param {string} props.email - User's email for fetching the photo
- * @param {string} props.name - User's name for alt text
- * @param {string} props.size - Size of the photo ('sm', 'md', 'lg')
- * @param {boolean} props.clickable - Whether the photo is clickable
- * @param {function} props.onClick - Click handler function
+ * @param {string} props.email - User's email (for default avatar generation)
+ * @param {string} props.name - User's name (for default avatar generation)
+ * @param {string} props.photoUrl - URL to the user's profile photo (optional)
+ * @param {string} props.size - Size of the photo: "xs", "sm", "md", "lg", "xl" (default: "md")
+ * @param {boolean} props.clickable - Whether the photo should have a clickable style
+ * @param {function} props.onClick - Click handler for the photo
  */
 const ProfilePhoto = ({ 
   email, 
   name, 
-  size = 'md', 
-  clickable = false, 
-  onClick = null 
+  photoUrl, 
+  size = "md", 
+  clickable = false,
+  onClick
 }) => {
-  const [photoError, setPhotoError] = useState(false);
-  const [photoUrl, setPhotoUrl] = useState(null);
+  const [imageUrl, setImageUrl] = useState('');
+  const [error, setError] = useState(false);
   
-  // Size classes
-  const sizes = {
+  // Determine size class based on the size prop
+  const sizeClasses = {
+    xs: 'w-6 h-6',
     sm: 'w-8 h-8',
-    md: 'w-12 h-12',
-    lg: 'w-20 h-20',
-    xl: 'w-32 h-32'
+    md: 'w-10 h-10',
+    lg: 'w-16 h-16',
+    xl: 'w-24 h-24'
   };
   
-  // Icon sizes
-  const iconSizes = {
-    sm: 'h-4 w-4',
-    md: 'h-6 w-6',
-    lg: 'h-10 w-10',
-    xl: 'h-16 w-16'
-  };
-  
-  const sizeClass = sizes[size] || sizes.md;
-  const iconSize = iconSizes[size] || iconSizes.md;
-  
-  // Set up profile photo
+  // Set the image URL on mount and when props change
   useEffect(() => {
-    if (email) {
-      // Use the direct photo endpoint
-      const directUrl = getDirectProfilePhotoUrl(email);
-      setPhotoUrl(directUrl);
-      setPhotoError(false);
+    setError(false);
+    
+    if (photoUrl) {
+      // Use the provided photo URL if available
+      setImageUrl(photoUrl);
     } else {
-      setPhotoUrl(null);
+      // Generate a default avatar URL based on the user's name or email
+      const identifier = name || email || '';
+      setImageUrl(getDefaultAvatarUrl(identifier));
     }
-  }, [email]);
+  }, [photoUrl, name, email]);
   
-  const containerClasses = `
-    ${sizeClass} 
-    rounded-full 
-    bg-gray-200 
-    overflow-hidden 
-    flex-shrink-0
-    ${clickable ? 'cursor-pointer hover:opacity-90' : ''}
-    border border-gray-200
-  `;
+  // Handle image loading errors
+  const handleError = () => {
+    setError(true);
+    // Fall back to default avatar
+    const identifier = name || email || '';
+    setImageUrl(getDefaultAvatarUrl(identifier));
+  };
+  
+  // Generate initials for fallback display
+  const getInitials = () => {
+    if (name) {
+      // Extract initials from name
+      const nameParts = name.split(' ');
+      if (nameParts.length >= 2) {
+        return `${nameParts[0][0]}${nameParts[1][0]}`.toUpperCase();
+      } else if (name.length > 0) {
+        return name[0].toUpperCase();
+      }
+    } else if (email) {
+      // Use first letter of email
+      return email[0].toUpperCase();
+    }
+    return '?';
+  };
   
   return (
     <div 
-      className={containerClasses}
-      onClick={clickable && onClick ? onClick : undefined}
+      className={`${sizeClasses[size]} rounded-full overflow-hidden bg-gray-200 flex items-center justify-center text-gray-700 ${clickable ? 'cursor-pointer hover:opacity-80' : ''}`}
+      onClick={onClick}
     >
-      {photoUrl && !photoError ? (
+      {imageUrl && !error ? (
         <img 
-          src={photoUrl} 
-          alt={name || 'User'}
+          src={imageUrl} 
+          alt={`${name || email || 'User'}'s profile`}
           className="w-full h-full object-cover"
-          onError={() => setPhotoError(true)}
+          onError={handleError}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <User className={`${iconSize} text-gray-500`} />
-        </div>
+        <span className="font-bold text-sm">{getInitials()}</span>
       )}
     </div>
   );

@@ -9,7 +9,6 @@ import { FileText, ImageIcon, Music, Video, Code } from 'lucide-react';
 const CreatorDashboard = () => {
   const { 
     creations, 
-    folders, 
     handleEdit, 
     setActiveView 
   } = useAppContext();
@@ -36,7 +35,7 @@ const CreatorDashboard = () => {
     <div className="dashboard">
       <div className="stats-container">
         <StatCard title="Total Creations" value={creations.length} />
-        <StatCard title="Total Folders" value={folders.length} />
+  
         <Card>
           <CardHeader className="stats-header">
             <CardTitle className="stats-title">Recent Activity</CardTitle>

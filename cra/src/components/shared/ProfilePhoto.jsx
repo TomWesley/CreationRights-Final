@@ -1,6 +1,6 @@
 // src/components/shared/ProfilePhoto.jsx
 import React, { useState, useEffect } from 'react';
-import { getDefaultAvatarUrl } from '../../services/ProfilePhotoService';
+import { getDefaultAvatarUrl, getProfilePhotoProxyUrl } from '../../services/ProfilePhotoService';
 
 /**
  * Component to display a user's profile photo or default avatar
@@ -8,6 +8,7 @@ import { getDefaultAvatarUrl } from '../../services/ProfilePhotoService';
  * @param {string} props.email - User's email (for default avatar generation)
  * @param {string} props.name - User's name (for default avatar generation)
  * @param {string} props.photoUrl - URL to the user's profile photo (optional)
+ * @param {string} props.userId - User's ID (optional, used if photoUrl not provided)
  * @param {string} props.size - Size of the photo: "xs", "sm", "md", "lg", "xl" (default: "md")
  * @param {boolean} props.clickable - Whether the photo should have a clickable style
  * @param {function} props.onClick - Click handler for the photo
@@ -16,6 +17,7 @@ const ProfilePhoto = ({
   email, 
   name, 
   photoUrl, 
+  userId,
   size = "md", 
   clickable = false,
   onClick
@@ -36,18 +38,43 @@ const ProfilePhoto = ({
   useEffect(() => {
     setError(false);
     
+    // Add a cache-busting query parameter to prevent stale images
+    const cacheBuster = `?t=${Date.now()}`;
+    
     if (photoUrl) {
       // Use the provided photo URL if available
-      setImageUrl(photoUrl);
+      console.log(`Using provided photoUrl: ${photoUrl}`);
+      
+      // Add cache buster only if it's not already a URL with query params
+      setImageUrl(photoUrl + (photoUrl.includes('?') ? '&cb=' : '?cb=') + Date.now());
+    } else if (userId) {
+      // If we have a userId but no photoUrl, use the proxy endpoint
+      console.log(`Using proxy URL for userId: ${userId}`);
+      setImageUrl(getProfilePhotoProxyUrl(userId) + cacheBuster);
+    } else if (email) {
+      // Try to extract userId from email
+      // This assumes userId is derived from email in your system
+      const extractedUserId = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '_');
+      
+      if (extractedUserId) {
+        console.log(`Using proxy URL for extracted userId: ${extractedUserId}`);
+        setImageUrl(getProfilePhotoProxyUrl(extractedUserId) + cacheBuster);
+      } else {
+        // Fall back to default avatar
+        console.log(`Using default avatar for email: ${email}`);
+        setImageUrl(getDefaultAvatarUrl(name || email));
+      }
     } else {
-      // Generate a default avatar URL based on the user's name or email
-      const identifier = name || email || '';
+      // Generate a default avatar URL based on the user's name
+      const identifier = name || '';
+      console.log(`Using default avatar for name: ${identifier}`);
       setImageUrl(getDefaultAvatarUrl(identifier));
     }
-  }, [photoUrl, name, email]);
+  }, [photoUrl, name, email, userId]);
   
   // Handle image loading errors
   const handleError = () => {
+    console.log(`Error loading image from: ${imageUrl}`);
     setError(true);
     // Fall back to default avatar
     const identifier = name || email || '';

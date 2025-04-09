@@ -44,7 +44,7 @@ const Settings = () => {
       }
       
       try {
-        console.log(`Loading user data for ${currentUser.email}...`);
+        console.log(`Loading user data for ${currentUser.email}...`, currentUser);
         
         // Set profile data from currentUser object (which comes from Firestore)
         setProfileData({
@@ -81,11 +81,15 @@ const Settings = () => {
 
   // Handle photo change
   const handlePhotoChange = (file, photoUrl) => {
+    console.log('Photo changed:', { photoUrl });
+    
+    // Update profile data with new photo URL
     setProfileData(prev => ({
       ...prev,
-      photoUrl: photoUrl
+      photoUrl: photoUrl,
+      // The photo path will be updated later when form is submitted
+      // or when the photo upload completes
     }));
-    console.log('Photo changed:', { file, photoUrl });
   };
 
   // Handle adding a content type
@@ -165,7 +169,7 @@ const Settings = () => {
       }, 3000);
     } catch (error) {
       console.error('Error updating profile:', error);
-      alert('Failed to update profile. Please try again. Error: ' + error.message);
+      setError(`Failed to update profile: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -175,7 +179,7 @@ const Settings = () => {
     <div className="settings-view">
       <h1 className="text-2xl font-bold mb-6">Account Settings</h1>
       
-      {isLoading ? (
+      {isLoading && !profileData.name ? (
         <div className="text-center py-12">
           <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
           <p className="mt-4 text-gray-500">Loading profile data...</p>

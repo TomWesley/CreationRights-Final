@@ -510,9 +510,6 @@ app.get('/api/images/:userId/:objectPath(*)', async (req, res) => {
     res.status(500).send('Error retrieving image');
   }
 });
-// Profile photo upload endpoint
-// Get user profile photo
-// Update this endpoint in server/index.js
 
 // Profile photo upload endpoint
 app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, res) => {
@@ -542,8 +539,9 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
       try {
         const bucket = storage.bucket(BUCKET_NAME);
         
-        // Use the correct file path for profile photos that matches where you're looking for them
-        const gcsFilePath = `ProfilePhotos/photo${path.extname(file.originalname)}`;
+        // Use a consistent naming pattern for user profile photos
+        const extension = path.extname(file.originalname) || '.jpg';
+        const gcsFilePath = `ProfilePhotos/${userId}${extension}`;
         console.log(`Uploading profile photo to: ${gcsFilePath}`);
         
         // Create a file in the bucket
@@ -553,8 +551,9 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
         const stream = gcsFile.createWriteStream({
           metadata: {
             contentType: file.mimetype,
-            cacheControl: 'no-cache, max-age=0'
-          }
+            cacheControl: 'private, max-age=86400'  // 1 day cache, private
+          },
+          resumable: false  // For small files, this is faster
         });
         
         // Handle errors and completion
@@ -564,12 +563,23 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
             reject(err);
           });
           
-          stream.on('finish', () => {
-            // Generate public URL
-            const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
-            fileInfo.gcsUrl = publicUrl;
-            fileInfo.url = publicUrl;
-            resolve();
+          stream.on('finish', async () => {
+            try {
+              // Get the file metadata to confirm upload
+              const [metadata] = await gcsFile.getMetadata();
+              console.log(`Upload successful, size: ${metadata.size} bytes, type: ${metadata.contentType}`);
+              
+              // Generate the proxy URL - this URL will never expire
+              const proxyUrl = `${req.protocol}://${req.get('host')}/api/users/${userId}/profile-photo`;
+              
+              fileInfo.proxyUrl = proxyUrl;
+              fileInfo.path = gcsFilePath;
+              
+              resolve();
+            } catch (metaErr) {
+              console.error('Error getting file metadata:', metaErr);
+              reject(metaErr);
+            }
           });
         });
         
@@ -598,11 +608,16 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
   }
 });
 
-// Delete user profile photo
+// Delete user profile photo endpoint - updated for server proxy approach
 app.delete('/api/users/:userId/profile-photo', async (req, res) => {
   try {
     const { userId } = req.params;
     console.log(`Deleting profile photo for user ${userId}...`);
+    
+    if (!storage) {
+      console.error('Storage client not initialized');
+      return res.status(500).json({ error: 'Storage service unavailable' });
+    }
     
     const bucket = storage.bucket(BUCKET_NAME);
     
@@ -611,9 +626,9 @@ app.delete('/api/users/:userId/profile-photo', async (req, res) => {
     let photoPath = null;
     let photoFile = null;
     
+    // Try to find the user's profile photo
     for (const ext of extensions) {
-      // This path should match where the profile photo is uploaded to
-      const path = `ProfilePhotos/photo.${ext}`;
+      const path = `ProfilePhotos/${userId}.${ext}`;
       console.log(`Checking for profile photo at: ${path}`);
       
       const file = bucket.file(path);
@@ -622,7 +637,7 @@ app.delete('/api/users/:userId/profile-photo', async (req, res) => {
       if (exists) {
         photoPath = path;
         photoFile = file;
-        console.log(`Found profile photo at: ${path}`);
+        console.log(`Found profile photo to delete at: ${path}`);
         break;
       }
     }
@@ -640,7 +655,11 @@ app.delete('/api/users/:userId/profile-photo', async (req, res) => {
       await photoFile.delete();
       console.log(`Deleted profile photo at: ${photoPath}`);
       
-      res.status(200).json({ success: true, message: 'Profile photo deleted' });
+      res.status(200).json({ 
+        success: true, 
+        message: 'Profile photo deleted successfully',
+        photoPath
+      });
     } catch (deleteError) {
       console.error('Error deleting profile photo:', deleteError);
       res.status(500).json({ 
@@ -656,37 +675,51 @@ app.delete('/api/users/:userId/profile-photo', async (req, res) => {
     });
   }
 });
-
-// Get user profile photo - this is the missing endpoint
+// Get user profile photo
+/**
+ * Profile photo proxy endpoint - streams photos directly from GCS
+ * This provides a consistent URL that never expires
+ */
 app.get('/api/users/:userId/profile-photo', async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log(`Getting profile photo for user ${userId}...`);
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    console.log(`Fetching profile photo for user ${userId}...`);
+    
+    // Check if GCS is initialized
+    if (!storage) {
+      console.error('Storage client not initialized');
+      return res.status(500).json({ error: 'Storage service unavailable' });
+    }
     
     const bucket = storage.bucket(BUCKET_NAME);
     
     // Check for profile photo with various extensions
     const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    let photoPath = null;
     let photoFile = null;
+    let photoPath = null;
     
+    // Try to find the user's profile photo
     for (const ext of extensions) {
-      // This path should match where the profile photo is uploaded to
-      const path = `ProfilePhotos/photo.${ext}`;
+      const path = `ProfilePhotos/${userId}.${ext}`;
       console.log(`Checking for profile photo at: ${path}`);
       
       const file = bucket.file(path);
       const [exists] = await file.exists();
       
       if (exists) {
-        photoPath = path;
         photoFile = file;
+        photoPath = path;
         console.log(`Found profile photo at: ${path}`);
         break;
       }
     }
     
-    if (!photoPath) {
+    if (!photoFile) {
       console.log(`No profile photo found for user ${userId}`);
       return res.status(404).json({ 
         error: 'Profile photo not found',
@@ -697,26 +730,55 @@ app.get('/api/users/:userId/profile-photo', async (req, res) => {
     // Get the file's metadata to set the correct content type
     const [metadata] = await photoFile.getMetadata();
     res.setHeader('Content-Type', metadata.contentType);
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    
+    // Add cache control headers for better performance
+    // Cache for 1 day in browser, but allow revalidation
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+    
+    // Add ETag for caching
+    if (metadata.etag) {
+      res.setHeader('ETag', metadata.etag);
+    }
+    
+    // Handle conditional requests (If-None-Match)
+    const clientEtag = req.headers['if-none-match'];
+    if (clientEtag && metadata.etag && clientEtag === metadata.etag) {
+      return res.status(304).end(); // Not Modified
+    }
     
     // Stream the file directly to the response
     photoFile.createReadStream()
       .on('error', (err) => {
         console.error('Error streaming profile photo:', err);
-        res.status(500).send('Error retrieving profile photo');
+        // Only send error if headers haven't been sent yet
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: 'Error retrieving profile photo',
+            message: err.message
+          });
+        } else {
+          // Otherwise just close the connection
+          res.end();
+        }
       })
       .pipe(res);
       
   } catch (error) {
-    console.error('Error fetching profile photo from GCS:', error);
-    res.status(500).json({ 
-      error: 'Error retrieving profile photo',
-      message: error.message
-    });
+    console.error('Error in profile photo proxy:', error);
+    // Check if headers have been sent before attempting to send error response
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Error retrieving profile photo',
+        message: error.message
+      });
+    } else {
+      res.end();
+    }
   }
 });
 
 // Add a simpler endpoint to get user profile photo URL
+// Get profile photo URL endpoint
 app.get('/api/users/:userId/profile-photo-url', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -727,8 +789,11 @@ app.get('/api/users/:userId/profile-photo-url', async (req, res) => {
     const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     let photoPath = null;
     
+    // Try user-specific photo
     for (const ext of extensions) {
-      const path = `ProfilePhotos/photo.${ext}`;
+      const path = `ProfilePhotos/${userId}.${ext}`;
+      console.log(`Checking for profile photo at: ${path}`);
+      
       const file = bucket.file(path);
       const [exists] = await file.exists();
       
@@ -895,53 +960,6 @@ app.get('/api/files/check/:userId/:creationRightsId', async (req, res) => {
 
 
 
-/**
- * Ensures a user has the proper folder structure in Google Cloud Storage
- * @param {string} userId - The sanitized user ID
- * @returns {Promise<boolean>} - Whether the operation was successful
- */
-const ensureUserFolderStructure = async (userId) => {
-  try {
-    if (!storage) {
-      console.error('Storage not initialized');
-      return false;
-    }
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    const folderStructure = [
-      `users/${userId}/.keep`,
-      `users/${userId}/profile/.keep`,
-      `users/${userId}/chats/.keep`,
-      `users/${userId}/creations/.keep`,
-      `users/${userId}/creations/assets/.keep`,
-      `users/${userId}/creations/metadata/.keep`
-    ];
-    
-    console.log(`Ensuring folder structure for user ${userId}...`);
-    
-    // Create all directories in parallel
-    await Promise.all(folderStructure.map(async (path) => {
-      try {
-        const [exists] = await bucket.file(path).exists();
-        if (!exists) {
-          await bucket.file(path).save('', {
-            metadata: {
-              contentType: 'text/plain'
-            }
-          });
-          console.log(`Created: ${path}`);
-        }
-      } catch (error) {
-        console.error(`Error creating ${path}:`, error);
-      }
-    }));
-    
-    return true;
-  } catch (error) {
-    console.error('Error ensuring user folder structure:', error);
-    return false;
-  }
-};
 const ensureCreationsMetadata = async (userId) => {
   try {
     if (!storage) {

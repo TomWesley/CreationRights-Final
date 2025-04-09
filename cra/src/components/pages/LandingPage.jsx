@@ -44,7 +44,7 @@ const LandingPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>Keep all your creative works organized with our intuitive folder system and tagging features.</p>
+                <p>Sell your works to licensing agencies with minimal effort.</p>
               </CardContent>
             </Card>
             

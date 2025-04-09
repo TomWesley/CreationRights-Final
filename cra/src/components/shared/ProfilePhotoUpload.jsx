@@ -18,16 +18,20 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(currentPhoto || '');
+  const [uploadError, setUploadError] = useState(null);
   const fileInputRef = useRef(null);
   
-  // Handle file selection
+  // Handle file selection and immediate upload
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
+    // Clear previous errors
+    setUploadError(null);
+    
     // Check if file is an image
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file (JPEG, PNG, etc.)');
+      setUploadError('Please select an image file (JPEG, PNG, etc.)');
       return;
     }
     
@@ -41,7 +45,9 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
         setIsUploading(true);
         
         // Upload to Google Cloud Storage via our backend API
+        console.log('Starting profile photo upload to GCS...');
         const photoUrl = await uploadProfilePhoto(currentUser.uid, file);
+        console.log('Upload successful, photo URL:', photoUrl);
         
         // Call the callback with the new URL
         if (onPhotoChange) {
@@ -55,13 +61,16 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
         setPreviewUrl(photoUrl);
       } catch (error) {
         console.error('Error uploading photo:', error);
-        alert('Failed to upload photo. Please try again. Error: ' + error.message);
+        setUploadError(`Failed to upload photo: ${error.message}`);
         
         // Revert to previous photo on error
         setPreviewUrl(currentPhoto || '');
       } finally {
         setIsUploading(false);
       }
+    } else {
+      console.error('Cannot upload photo: No user ID available');
+      setUploadError('Cannot upload photo: User not logged in');
     }
   };
   
@@ -72,14 +81,19 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
   
   // Handle photo deletion
   const handleDeletePhoto = async () => {
-    if (!currentUser?.uid || !photoPath) return;
+    if (!currentUser?.uid || !photoPath) {
+      setUploadError('Cannot delete photo: Missing user ID or photo path');
+      return;
+    }
     
     if (window.confirm('Are you sure you want to remove your profile photo?')) {
       try {
         setIsDeleting(true);
         
+        console.log(`Deleting profile photo for user ${currentUser.uid}, path: ${photoPath}`);
         // Delete from storage
         await deleteProfilePhoto(currentUser.uid, photoPath);
+        console.log('Photo deletion successful');
         
         // Clear preview
         setPreviewUrl('');
@@ -90,7 +104,7 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
         }
       } catch (error) {
         console.error('Error deleting photo:', error);
-        alert('Failed to delete photo. Please try again.');
+        setUploadError(`Failed to delete photo: ${error.message}`);
       } finally {
         setIsDeleting(false);
       }
@@ -142,6 +156,13 @@ const ProfilePhotoUpload = ({ currentPhoto, onPhotoChange, photoPath }) => {
       <p className="text-xs text-gray-500 mt-2">
         {previewUrl ? 'Change photo' : 'Add profile photo'}
       </p>
+      
+      {/* Display error if any */}
+      {uploadError && (
+        <p className="text-xs text-red-500 mt-1">
+          {uploadError}
+        </p>
+      )}
       
       {/* Hidden file input */}
       <input 

@@ -55,49 +55,6 @@ const upload = multer({
   }
 });
 
-// Helper function to ensure user folder structure
-const ensureUserFolderStructure = async (userId) => {
-  try {
-    if (!storage) {
-      console.error('Storage not initialized');
-      return false;
-    }
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    const folderStructure = [
-      `users/${userId}/.keep`,
-      `users/${userId}/profile/.keep`,
-      `users/${userId}/chats/.keep`,
-      `users/${userId}/creations/.keep`,
-      `users/${userId}/creations/assets/.keep`,
-      `users/${userId}/creations/metadata/.keep`
-    ];
-    
-    console.log(`Ensuring folder structure for user ${userId}...`);
-    
-    // Create all directories in parallel
-    await Promise.all(folderStructure.map(async (path) => {
-      try {
-        const [exists] = await bucket.file(path).exists();
-        if (!exists) {
-          await bucket.file(path).save('', {
-            metadata: {
-              contentType: 'text/plain'
-            }
-          });
-          console.log(`Created: ${path}`);
-        }
-      } catch (error) {
-        console.error(`Error creating ${path}:`, error);
-      }
-    }));
-    
-    return true;
-  } catch (error) {
-    console.error('Error ensuring user folder structure:', error);
-    return false;
-  }
-};
 
 // Helper function to ensure creation folder structure
 const ensureCreationFolderStructure = async (userId, creationRightsId) => {

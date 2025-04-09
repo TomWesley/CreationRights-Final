@@ -511,18 +511,31 @@ export const uploadThumbnail = async (userId, file, creationRightsId) => {
   }
 };
 
-// Update profile photo upload
+
+/**
+ * Upload profile photo to Google Cloud Storage
+ * @param {string} userId - User ID
+ * @param {File} file - Photo file to upload
+ * @returns {Promise<string>} - URL to the uploaded photo
+ */
 export const uploadProfilePhoto = async (userId, file) => {
   try {
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    if (!userId || !file) {
+      throw new Error('User ID and file are required');
+    }
+    
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Only image files are allowed for profile photos');
+    }
+    
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
     
     // Create form data
     const formData = new FormData();
     formData.append('file', file);
     
     // Send request
-    const response = await fetch(`${API_URL}/users/${sanitizedUserId}/profile-photo`, {
+    const response = await fetch(`${API_URL}/api/users/${userId}/profile-photo`, {
       method: 'POST',
       body: formData,
     });
@@ -541,49 +554,54 @@ export const uploadProfilePhoto = async (userId, file) => {
     throw error;
   }
 };
-
 /**
- * Get the profile photo URL for a user
- * @param {string} email - User email
- * @returns {Promise<string|null>} - URL to the profile photo or null if not found
- */
-export const getProfilePhotoUrl = async (email) => {
-  try {
-    const sanitizedEmail = sanitizeEmail(email);
-    console.log(`Getting profile photo URL for ${sanitizedEmail}`);
-    
-    // Use correct API URL format
-    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
-    const url = `${API_URL}/api/users/${sanitizedEmail}/profile-photo-url`;
-    
-    const response = await fetch(url);
-    
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log('No profile photo found');
-        return null;
-      }
-      throw new Error(`Failed to get profile photo URL: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.photoUrl;
-  } catch (error) {
-    console.error('Error getting profile photo URL:', error);
-    return null;
-  }
+* Get the profile photo URL for a user
+* @param {string} email - User email
+* @returns {Promise<string|null>} - URL to the profile photo or null if not found
+*/
+export const getProfilePhotoUrl = async (userId) => {
+ try {
+   if (!userId) {
+     console.error('User ID is required to get profile photo URL');
+     return null;
+   }
+   
+   console.log(`Getting profile photo URL for user ${userId}`);
+   
+   // Use correct API URL format
+   const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+   const url = `${API_URL}/api/users/${userId}/profile-photo-url`;
+   
+   const response = await fetch(url);
+   
+   if (!response.ok) {
+     if (response.status === 404) {
+       console.log('No profile photo found');
+       return null;
+     }
+     throw new Error(`Failed to get profile photo URL: ${response.status}`);
+   }
+   
+   const data = await response.json();
+   return data.photoUrl;
+ } catch (error) {
+   console.error('Error getting profile photo URL:', error);
+   return null;
+ }
 };
 
 /**
  * Get the direct profile photo URL (for use in img src attributes)
- * @param {string} email - User email
+ * @param {string} userId - User ID
  * @returns {string} - URL to the profile photo
  */
-export const getDirectProfilePhotoUrl = (email) => {
-  const sanitizedEmail = sanitizeEmail(email);
+export const getDirectProfilePhotoUrl = (userId) => {
+  if (!userId) return null;
+  
   const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
-  return `${API_URL}/api/users/${sanitizedEmail}/profile-photo?t=${Date.now()}`;
+  return `${API_URL}/api/users/${userId}/profile-photo?t=${Date.now()}`; // Add timestamp to prevent caching
 };
+
 
 // Add these functions to your existing api.js file
 

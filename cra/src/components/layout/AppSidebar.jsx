@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram, DollarSign } from 'lucide-react';
-import FolderStructure from '../shared/FolderStructure';
+
 import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
 import { getUnreadMessagesCount } from '../../services/firestoreChat';
@@ -76,11 +76,7 @@ const AppSidebar = () => {
                 {isAgency ? 'Creations' : 'My Creations'}
               </button>
               
-              {!isAgency && (
-                <div className="folder-tree">
-                  <FolderStructure />
-                </div>
-              )}
+              
             </div>
             
             {/* Social Media Nav Item */}

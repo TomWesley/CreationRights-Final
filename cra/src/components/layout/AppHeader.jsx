@@ -87,6 +87,8 @@ const AppHeader = () => {
               <ProfilePhoto 
                 email={currentUser?.email}
                 name={currentUser?.name || formatDisplayName(currentUser?.email)}
+                photoUrl={currentUser?.photoUrl} // Pass the photoUrl from Firestore
+                userId={currentUser?.uid} // Pass the userId for proxy URL construction
                 size="sm"
                 clickable
               />

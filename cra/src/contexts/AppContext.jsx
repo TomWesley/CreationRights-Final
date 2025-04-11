@@ -142,52 +142,64 @@ export const AppProvider = ({ children }) => {
   }, [activeView, isAuthenticated]);
 
   // Load user data (folders and creations)
-  const loadUserData = async (userId) => {
-    try {
-      setIsLoading(true);
-      console.log(`Loading data for user: ${userId}`);
-      
-      // Clear existing data
-      setCreations([]);
-      
-      // Load creations from Firestore
-      try {
-        const creationsRef = collection(db, 'users', userId, 'creations');
-        const creationsQuery = query(creationsRef, orderBy('dateCreated', 'desc'));
-        const creationsSnapshot = await getDocs(creationsQuery);
-        
-        const userCreations = [];
-        creationsSnapshot.forEach((doc) => {
-          userCreations.push({
-            id: doc.id,
-            ...doc.data()
-          });
-        });
-        
-        console.log(`Loaded ${userCreations.length} creations for user ${userId}`);
-        setCreations(userCreations);
-      } catch (creationsError) {
-        console.error('Error loading creations:', creationsError);
-      }
-      
-      // If no creations found in Firestore, use mock data as fallback during development
-      if (creations.length === 0) {
-        try {
-          const mockCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
-          if (mockCreations.length > 0) {
-            console.log('Using mock creations data:', mockCreations.length);
-            setCreations(mockCreations);
-          }
-        } catch (mockError) {
-          console.error('Error loading mock data:', mockError);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    } finally {
+  // Load user data from Firestore
+const loadUserData = async (email) => {
+  try {
+    setIsLoading(true);
+    console.log(`Loading data for user: ${email}`);
+    
+    // Ensure we have a current authenticated user before accessing Firestore
+    if (!auth.currentUser || !auth.currentUser.uid) {
+      console.error('Cannot load user data: No authenticated user');
       setIsLoading(false);
+      return;
     }
-  };
+    
+    const userId = auth.currentUser.uid; // Use the UID from auth
+    console.log(`Using Firebase UID: ${userId} for loading data`);
+    
+    // Clear existing data
+    setCreations([]);
+    
+    // Load creations from Firestore
+    try {
+      const creationsRef = collection(db, 'users', userId, 'creations');
+      const creationsQuery = query(creationsRef, orderBy('dateCreated', 'desc'));
+      const creationsSnapshot = await getDocs(creationsQuery);
+      
+      const userCreations = [];
+      creationsSnapshot.forEach((doc) => {
+        userCreations.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+      
+      console.log(`Loaded ${userCreations.length} creations for user ${userId}`);
+      setCreations(userCreations);
+    } catch (creationsError) {
+      console.error('Error loading creations:', creationsError);
+      console.error('Error details:', creationsError.code, creationsError.message);
+    }
+    
+    // If no creations found in Firestore, use mock data as fallback during development
+    if (creations.length === 0) {
+      try {
+        const mockCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
+        if (mockCreations.length > 0) {
+          console.log('Using mock creations data:', mockCreations.length);
+          setCreations(mockCreations);
+        }
+      } catch (mockError) {
+        console.error('Error loading mock data:', mockError);
+      }
+    }
+  } catch (error) {
+    console.error('Error loading user data:', error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
 
  

@@ -1,4 +1,4 @@
-// src/components/pages/MyCreationsList.jsx - Updated with upload button
+// src/components/pages/MyCreationsList.jsx
 
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Cloud } from 'lucide-react';
@@ -8,9 +8,7 @@ import { Input } from '../ui/input';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import CreationCard from '../shared/CreationCard';
 import { useAppContext } from '../../contexts/AppContext';
-
-// Import mockCreations directly
-import mockCreationsData from '../../data/mockCreations';
+import { useToast } from '../ui/use-toast';
 
 const MyCreationsList = () => {
   const { 
@@ -19,45 +17,50 @@ const MyCreationsList = () => {
     isLoading,
     setIsLoading,
     currentUser,
-    setActiveView
+    setActiveView,
+    creations,
+    handleDelete,
+    handleUpdateCreation,
+    loadUserData
   } = useAppContext();
+  
+  const { toast } = useToast();
   
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
-  // Initialize with an empty array to prevent "not iterable" error
-  const [creations, setCreations] = useState([]);
   const [filteredCreations, setFilteredCreations] = useState([]);
   
-  // Load mock data on component mount
+  // Load data on component mount
   useEffect(() => {
-    console.log("Mock creations data:", mockCreationsData);
-    setIsLoading(true);
-    
-    try {
-      if (Array.isArray(mockCreationsData)) {
-        console.log("Successfully imported mockCreations as array, length:", mockCreationsData.length);
-        setCreations(mockCreationsData);
-        localStorage.setItem('mockCreations', JSON.stringify(mockCreationsData));
-      } else {
-        console.error("mockCreationsData is not an array:", typeof mockCreationsData);
-        // If the import didn't return an array, try to check if it has a default property
-        if (mockCreationsData && mockCreationsData.default && Array.isArray(mockCreationsData.default)) {
-          console.log("Found array in mockCreationsData.default, length:", mockCreationsData.default.length);
-          setCreations(mockCreationsData.default);
+    const loadCreations = async () => {
+      setIsLoading(true);
+      
+      try {
+        if (currentUser && currentUser.uid) {
+          await loadUserData(currentUser.uid);
         } else {
-          // Last resort fallback
-          console.error("Failed to load mock data in any format");
-          setCreations([]);
+          console.error('Cannot load creations: No authenticated user');
+          toast({
+            title: "Authentication required",
+            description: "Please log in to view your creations",
+            variant: "destructive"
+          });
         }
+      } catch (error) {
+        console.error('Error loading creations:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load your creations",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error loading mock data:', error);
-      // Fallback to empty array
-      setCreations([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [setIsLoading]);
+    };
+    
+    loadCreations();
+    // Empty dependency array to run only once on mount
+  }, []);
   
   // Filter creations based on tab and search query
   useEffect(() => {
@@ -99,29 +102,34 @@ const MyCreationsList = () => {
       status: creation.status === 'published' ? 'draft' : 'published'
     };
     
-    // Update creation in local state
-    const updatedCreations = creations.map(c => 
-      c.id === creation.id ? updatedCreation : c
-    );
+    handleUpdateCreation(updatedCreation);
     
-    // Update state and save to localStorage
-    setCreations(updatedCreations);
-    localStorage.setItem('mockCreations', JSON.stringify(updatedCreations));
+    toast({
+      title: updatedCreation.status === 'published' ? "Creation published" : "Creation unpublished",
+      description: `${creation.title} is now ${updatedCreation.status === 'published' ? 'visible to agencies' : 'in draft mode'}`,
+      variant: "default"
+    });
   };
   
   // Handle delete creation
   const handleDeleteCreation = (id) => {
-    if (window.confirm('Are you sure you want to delete this creation?')) {
-      const updatedCreations = creations.filter(creation => creation.id !== id);
-      setCreations(updatedCreations);
-      localStorage.setItem('mockCreations', JSON.stringify(updatedCreations));
-    }
+    handleDelete(id);
+    
+    toast({
+      title: "Creation deleted",
+      description: "The creation has been permanently removed",
+      variant: "default"
+    });
   };
   
-  // Handle edit creation (stub for now)
+  // Handle edit creation
   const handleEditCreation = (creation) => {
-    console.log('Edit creation:', creation);
-    alert('Edit functionality will be implemented in the future.');
+    // For now, display a toast until edit functionality is implemented
+    toast({
+      title: "Edit not available",
+      description: "Edit functionality will be implemented soon",
+      variant: "default"
+    });
   };
   
   // Navigate to upload creation page
@@ -129,18 +137,29 @@ const MyCreationsList = () => {
     setActiveView('uploadCreation');
   };
   
-  // Reset mock data for testing
-  const resetMockData = () => {
-    if (Array.isArray(mockCreationsData)) {
-      setCreations(mockCreationsData);
-      localStorage.setItem('mockCreations', JSON.stringify(mockCreationsData));
-      console.log("Mock data reset to original state");
-    } else if (mockCreationsData && mockCreationsData.default && Array.isArray(mockCreationsData.default)) {
-      setCreations(mockCreationsData.default);
-      localStorage.setItem('mockCreations', JSON.stringify(mockCreationsData.default));
-      console.log("Mock data reset to original state (from default)");
-    } else {
-      console.error("Cannot reset mock data - source data is not an array");
+  // Refresh creations data
+  const refreshCreations = async () => {
+    setIsLoading(true);
+    
+    try {
+      if (currentUser && currentUser.uid) {
+        await loadUserData(currentUser.uid);
+        
+        toast({
+          title: "Refreshed",
+          description: "Your creations have been refreshed",
+          variant: "default"
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing creations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh creations",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
   
@@ -212,14 +231,13 @@ const MyCreationsList = () => {
                   <Plus className="h-4 w-4 mr-2" /> Upload Creation
                 </Button>
                 
-                {/* Debug button - you can remove this in production */}
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={resetMockData}
+                  onClick={refreshCreations}
                   className="mt-2"
                 >
-                  Reset Demo Data
+                  Refresh Creations
                 </Button>
               </div>
             </div>

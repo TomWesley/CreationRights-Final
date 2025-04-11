@@ -89,7 +89,7 @@ router.post('/:userId/upload', upload.single('file'), async (req, res) => {
     // Upload the file to Google Cloud Storage
     try {
       const bucket = storage.bucket(BUCKET_NAME);
-      const gcsFilePath = `Creations/${userId}/${creationRightsId}/${file.originalname}`;
+      const gcsFilePath = `Creations/${userId}/${creationRightsId}/file`;
       console.log(`Uploading file to: ${gcsFilePath}`);
       
       const gcsFile = bucket.file(gcsFilePath);
@@ -247,6 +247,84 @@ router.post('/:userId/creations', async (req, res) => {
   }
 });
 
+router.get('/:userId/:creationRightsId/download', async (req, res) => {
+    try {
+      const { userId, creationRightsId } = req.params;
+      
+      if (!storage) {
+        return res.status(500).json({ error: 'Storage not initialized' });
+      }
+      
+      console.log(`Fetching creation file for user ${userId}, creationRightsId ${creationRightsId}`);
+      
+      const bucket = storage.bucket(BUCKET_NAME);
+      
+      // First, try to locate the file in the primary location structure
+      const primaryPath = `Creations/${userId}/${creationRightsId}`;
+      
+      // List all files in this path to find the actual file (not metadata)
+      const [files] = await bucket.getFiles({ prefix: primaryPath });
+      
+      // Filter out metadata files
+      const contentFiles = files.filter(file => 
+        !file.name.endsWith('metadata.json') && 
+        !file.name.endsWith('upload-metadata.json')
+      );
+      
+      if (contentFiles.length === 0) {
+        console.log(`No content files found in ${primaryPath}`);
+        return res.status(404).json({ error: 'Creation file not found' });
+      }
+      
+      // Use the first content file found
+      const file = contentFiles[0];
+      console.log(`Found creation file: ${file.name}`);
+      
+      // Get the file's metadata to set the correct content type
+      const [metadata] = await file.getMetadata();
+      res.setHeader('Content-Type', metadata.contentType || 'application/octet-stream');
+      
+      // Add cache control headers for better performance
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+      
+      // Add ETag for caching
+      if (metadata.etag) {
+        res.setHeader('ETag', metadata.etag);
+      }
+      
+      // Handle conditional requests (If-None-Match)
+      const clientEtag = req.headers['if-none-match'];
+      if (clientEtag && metadata.etag && clientEtag === metadata.etag) {
+        return res.status(304).end(); // Not Modified
+      }
+      
+      // Stream the file directly to the response
+      file.createReadStream()
+        .on('error', (err) => {
+          console.error('Error streaming creation file:', err);
+          if (!res.headersSent) {
+            res.status(500).json({
+              error: 'Error retrieving creation file',
+              message: err.message
+            });
+          } else {
+            res.end();
+          }
+        })
+        .pipe(res);
+    } catch (error) {
+      console.error('Error in creation file download:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          error: 'Error retrieving creation file',
+          message: error.message
+        });
+      } else {
+        res.end();
+      }
+    }
+  });
+  
 // Endpoint to check if a file exists in GCS
 router.get('/files/check/:userId/:creationRightsId', async (req, res) => {
   try {

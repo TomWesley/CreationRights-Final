@@ -559,36 +559,6 @@ export const uploadProfilePhoto = async (userId, file) => {
 * @param {string} email - User email
 * @returns {Promise<string|null>} - URL to the profile photo or null if not found
 */
-export const getProfilePhotoUrl = async (userId) => {
- try {
-   if (!userId) {
-     console.error('User ID is required to get profile photo URL');
-     return null;
-   }
-   
-   console.log(`Getting profile photo URL for user ${userId}`);
-   
-   // Use correct API URL format
-   const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
-   const url = `${API_URL}/api/users/${userId}/profile-photo-url`;
-   
-   const response = await fetch(url);
-   
-   if (!response.ok) {
-     if (response.status === 404) {
-       console.log('No profile photo found');
-       return null;
-     }
-     throw new Error(`Failed to get profile photo URL: ${response.status}`);
-   }
-   
-   const data = await response.json();
-   return data.photoUrl;
- } catch (error) {
-   console.error('Error getting profile photo URL:', error);
-   return null;
- }
-};
 
 /**
  * Get the direct profile photo URL (for use in img src attributes)

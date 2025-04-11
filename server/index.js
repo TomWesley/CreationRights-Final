@@ -363,7 +363,7 @@ app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) =>
       log('info', 'Using storage bucket', { bucketName: BUCKET_NAME });
       
       // Path for the file
-      const gcsFilePath = `Creations/${userId}/${creationRightsId}/${file.originalname}`;
+      const gcsFilePath = `Creations/${userId}/${creationRightsId}/file`;
       log('info', 'Target path determined', { path: gcsFilePath });
       
       // Test bucket access
@@ -616,6 +616,94 @@ app.post('/api/users/:userId/profile-photo', upload.single('file'), async (req, 
   }
 });
 
+app.get('/api/users/:userId/:creationRightsId/download', async (req, res) => {
+  try {
+    const { userId, creationRightsId} = req.params;
+    
+    if (!userId || !creationRightsId) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters',
+        message: 'User ID, creation ID and file name are required'
+      });
+    }
+    
+    console.log(`Fetching creation file: ${fileName} for creationRightsId=${creationRightsId}, user=${userId}`);
+    
+    // Check if GCS is initialized
+    if (!storage) {
+      console.error('Storage client not initialized');
+      return res.status(500).json({ error: 'Storage service unavailable' });
+    }
+    
+    const bucket = storage.bucket(BUCKET_NAME);
+    
+    // Construct the file path in GCP
+
+    const filePath = `Creations/${userId}/${creationRightsId}/file`;
+    console.log(`Looking for file at path: ${filePath}`);
+    
+    // Check if the file exists
+    const file = bucket.file(filePath);
+    const [exists] = await file.exists();
+    
+    if (!exists) {
+      console.log(`File not found at path: ${filePath}`);
+      return res.status(404).json({
+        error: 'File not found',
+        message: 'The requested file does not exist'
+      });
+    }
+    
+    // Get the file's metadata to set the correct content type
+    const [metadata] = await file.getMetadata();
+    res.setHeader('Content-Type', metadata.contentType || 'application/octet-stream');
+    
+    // Add cache control headers for better performance
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+    
+    // Add ETag for caching if available
+    if (metadata.etag) {
+      res.setHeader('ETag', metadata.etag);
+    }
+    
+    // Handle conditional requests (If-None-Match)
+    const clientEtag = req.headers['if-none-match'];
+    if (clientEtag && metadata.etag && clientEtag === metadata.etag) {
+      return res.status(304).end(); // Not Modified
+    }
+    
+    // Set content disposition for download or inline display
+    const isImage = metadata.contentType && metadata.contentType.startsWith('image/');
+    const isAudio = metadata.contentType && metadata.contentType.startsWith('audio/');
+    const isVideo = metadata.contentType && metadata.contentType.startsWith('video/');
+    const isPdf = metadata.contentType && metadata.contentType === 'application/pdf';
+    
+    // For media files, display inline; for other files, prompt for download
+    const disposition = (isImage || isAudio || isVideo || isPdf) ? 'inline' : 'attachment';    
+    // Stream the file directly to the response
+    console.log(`Streaming file: ${filePath}`);
+    file.createReadStream()
+      .on('error', (err) => {
+        console.error(`Error streaming file ${filePath}:`, err);
+        // Only send error if headers haven't been sent yet
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: 'Error retrieving file',
+            message: err.message
+          });
+        } else {
+          // Otherwise just close the connection
+          res.end();
+        }
+      })
+      .pipe(res);
+  } catch (error) {
+    console.error('Error serving creation file:', error);
+    // Check if headers have been sent before attempting to send error response
+    
+  }
+});
+
 // Delete user profile photo endpoint - updated for server proxy approach
 app.delete('/api/users/:userId/profile-photo', async (req, res) => {
   try {
@@ -787,53 +875,7 @@ app.get('/api/users/:userId/profile-photo', async (req, res) => {
 
 // Add a simpler endpoint to get user profile photo URL
 // Get profile photo URL endpoint
-app.get('/api/users/:userId/profile-photo-url', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    
-    // Check for profile photo with various extensions
-    const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    let photoPath = null;
-    
-    // Try user-specific photo
-    for (const ext of extensions) {
-      const path = `ProfilePhotos/${userId}.${ext}`;
-      console.log(`Checking for profile photo at: ${path}`);
-      
-      const file = bucket.file(path);
-      const [exists] = await file.exists();
-      
-      if (exists) {
-        photoPath = path;
-        break;
-      }
-    }
-    
-    if (!photoPath) {
-      console.log(`No profile photo found for user ${userId}`);
-      return res.status(404).json({ 
-        error: 'Profile photo not found'
-      });
-    }
-    
-    // Return the public URL
-    const photoUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${photoPath}`;
-    
-    res.status(200).json({ 
-      photoUrl: photoUrl,
-      path: photoPath
-    });
-      
-  } catch (error) {
-    console.error('Error getting profile photo URL:', error);
-    res.status(500).json({ 
-      error: 'Error retrieving profile photo URL',
-      message: error.message
-    });
-  }
-});
+
 
 
 // Add these routes to server/index.js

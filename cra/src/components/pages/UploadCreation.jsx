@@ -137,39 +137,41 @@ const UploadCreation = () => {
         }
 
         const uploadResult = await uploadWithProgress(file, currentUser.uid, creationRightsId);
-        const fileUrl = uploadResult.file.gcsUrl || uploadResult.file.url;
+        const fileUrl = `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/download`;
 
         // Process tags
         const tagArray = tags.split(',')
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
 
+
         // Create creation object with metadata
         const newCreation = {
-        id: creationRightsId,
-        title,
-        type: "Image",
-        dateCreated: new Date().toISOString().split('T')[0],
-        rights,
-        notes: description,
-        licensingCost: licensingCost !== '' ? parseFloat(licensingCost) : null,
-        tags: tagArray,
-        fileUrl: fileUrl, // Use the URL from GCS
-        thumbnailUrl: fileUrl, // For images, use the same URL as thumbnail
-        status: 'draft',
-        createdBy: currentUser.email,
-        metadata: {
-            category: "Photography",
-            creationRightsId,
-            photographer,
-            createdDate,
-            style,
-            collection,
-            rightsHolders: rightsHolder,
-            dimensions: "Original", // This could be determined from the image
-            uploadedBy: currentUser.email
-        }
-        };
+            id: creationRightsId,
+            title,
+            type: "Image",
+            dateCreated: new Date().toISOString().split('T')[0],
+            rights,
+            notes: description,
+            licensingCost: licensingCost !== '' ? parseFloat(licensingCost) : null,
+            tags: tagArray,
+            fileUrl: fileUrl, // Use the proxy URL
+            thumbnailUrl: fileUrl, // For images, use the same URL as thumbnail
+            status: 'draft',
+            createdBy: currentUser.email,
+            metadata: {
+              category: "Photography",
+              creationRightsId,
+              photographer,
+              createdDate,
+              style,
+              collection,
+              rightsHolders: rightsHolder,
+              dimensions: "Original", // This could be determined from the image
+              uploadedBy: currentUser.email,
+              originalGcsUrl: uploadResult.file.gcsUrl || uploadResult.file.url, // Store original URL as backup
+            }
+          };
 
         // Save to Firestore via AppContext
         const success = await handleSubmit(newCreation);

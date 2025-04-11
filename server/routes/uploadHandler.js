@@ -56,35 +56,6 @@ const upload = multer({
 });
 
 
-// Helper function to ensure creation folder structure
-const ensureCreationFolderStructure = async (userId, creationRightsId) => {
-  try {
-    if (!storage) {
-      console.error('Storage not initialized');
-      return false;
-    }
-    
-    const bucket = storage.bucket(BUCKET_NAME);
-    const folderPath = `users/${userId}/creations/assets/${creationRightsId}/.keep`;
-    
-    console.log(`Ensuring folder structure for creation ${creationRightsId}...`);
-    
-    const [exists] = await bucket.file(folderPath).exists();
-    if (!exists) {
-      await bucket.file(folderPath).save('', {
-        metadata: {
-          contentType: 'text/plain'
-        }
-      });
-      console.log(`Created: ${folderPath}`);
-    }
-    
-    return true;
-  } catch (error) {
-    console.error(`Error ensuring creation folder structure for ${creationRightsId}:`, error);
-    return false;
-  }
-};
 
 // File upload endpoint
 router.post('/:userId/upload', upload.single('file'), async (req, res) => {
@@ -100,16 +71,12 @@ router.post('/:userId/upload', upload.single('file'), async (req, res) => {
     console.log(`Processing upload for user: ${userId}`);
     console.log(`File details: name=${file.originalname}, size=${file.size}, type=${contentType}`);
     
-    // Ensure the user has proper folder structure
-    await ensureUserFolderStructure(userId);
+  
     
     // Get creationRightsId from form data (or generate a new one)
     const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
     console.log(`Using creationRightsId: ${creationRightsId}`);
-    
-    // Ensure creation folder structure
-    await ensureCreationFolderStructure(userId, creationRightsId);
-    
+
     // Create file info object
     const fileInfo = {
       originalName: file.originalname,
@@ -122,44 +89,28 @@ router.post('/:userId/upload', upload.single('file'), async (req, res) => {
     // Upload the file to Google Cloud Storage
     try {
       const bucket = storage.bucket(BUCKET_NAME);
-      const gcsFilePath = `users/${userId}/creations/assets/${creationRightsId}/${file.originalname}`;
+      const gcsFilePath = `Creations/${userId}/${creationRightsId}/${file.originalname}`;
       console.log(`Uploading file to: ${gcsFilePath}`);
       
       const gcsFile = bucket.file(gcsFilePath);
       
       // Create a writable stream to GCS
-      const stream = gcsFile.createWriteStream({
+      await gcsFile.save(file.buffer, {
+        contentType: contentType,
         metadata: {
           contentType: contentType,
           cacheControl: 'no-cache, max-age=0'
-        },
-        resumable: false, // For small files, this is faster
-        public: true
+        }
       });
       
       // Handle errors and completion
-      const streamPromise = new Promise((resolve, reject) => {
-        stream.on('error', (err) => {
-          console.error(`Stream error uploading ${file.originalname}:`, err);
-          reject(err);
-        });
-        
-        stream.on('finish', () => {
-          // Get the public URL
-          const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
-          fileInfo.gcsUrl = publicUrl;
-          fileInfo.url = publicUrl;
-          console.log(`File uploaded successfully: ${publicUrl}`);
-          resolve();
-        });
-      });
+      // After successful upload, generate the public URL
+        const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+        fileInfo.gcsUrl = publicUrl;
+        fileInfo.url = publicUrl;
+        console.log(`File uploaded successfully: ${publicUrl}`);
       
-      // Write the buffer to the stream
-      stream.end(file.buffer);
-      
-      // Wait for the stream to finish
-      await streamPromise;
-      
+
       // Also save a metadata file for this upload in the same folder
       const uploadMetadata = {
         creationRightsId,
@@ -173,7 +124,7 @@ router.post('/:userId/upload', upload.single('file'), async (req, res) => {
       };
       
       try {
-        const metadataPath = `users/${userId}/creations/assets/${creationRightsId}/upload-metadata.json`;
+        const metadataPath = `Creations/${userId}/${creationRightsId}/upload-metadata.json`;
         await bucket.file(metadataPath).save(
           JSON.stringify(uploadMetadata, null, 2),
           { contentType: 'application/json' }
@@ -221,9 +172,7 @@ router.post('/:userId/creations', async (req, res) => {
     }
     
     console.log(`Saving ${creations.length} creations for user ${userId}...`);
-    
-    // Ensure the user has proper folder structure
-    await ensureUserFolderStructure(userId);
+   
     
     // Add detailed logging to see what's happening
     const bucket = storage.bucket(BUCKET_NAME);

@@ -1,4 +1,4 @@
-// server/index.js - Updated with improved GCS folder structure
+// server/index.js 
 
 const express = require('express');
 const cors = require('cors');
@@ -20,13 +20,14 @@ const PORT = process.env.PORT || 3001;
 
 // CORS configuration
 const corsOptions = {
-  origin: '*', // In production, you should restrict this
+  origin: '*', // In production, replace with your actual domain
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Length', 'X-Content-Type-Options'],
   credentials: true,
   maxAge: 86400 // 1 day in seconds
 };
+
 
 // Apply CORS middleware
 
@@ -242,9 +243,6 @@ app.post('/api/users/:userId', async (req, res) => {
     console.log('Path params:', req.params);
     console.log('Request body:', JSON.stringify(userData).substring(0, 200) + '...');
     
-    // Ensure the user has the proper folder structure
-    await ensureUserFolderStructure(userId);
-    
     // Ensure the user has an empty creations metadata file if it doesn't exist
     await ensureCreationsMetadata(userId);
     
@@ -312,170 +310,180 @@ app.get('/api/users/:userId', async (req, res) => {
   }
 });
 
-// Folders endpoints
-app.post('/api/users/:userId/folders', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const folders = req.body;
-    
-    console.log(`Saving folders for user ${userId}...`);
-    
-    await handleStorageOperation(async () => {
-      const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(`users/${userId}/profile/folders.json`);
-      
-      await file.save(JSON.stringify(folders), {
-        contentType: 'application/json'
-      });
-    });
-    
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('Error saving folders:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
-
-
-// For thumbnails and previews for video/audio conten
-
-// Upload endpoint for creation assets
-// Update the upload endpoint in server/index.js
-
-// Upload endpoint for creation assets - updated with folder structure check
+// Create file upload endpoint
 app.post('/api/users/:userId/upload', upload.single('file'), async (req, res) => {
+  // Define a structured logger that writes directly to stdout
+  const log = (level, message, data = {}) => {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level: level.toUpperCase(),
+      message: message,
+      data: data
+    };
+    
+    // Write directly to stdout to ensure Cloud Run captures it
+    process.stdout.write(JSON.stringify(logEntry) + '\n');
+  };
+
   try {
+    // Log basic request info
+    log('info', 'Upload endpoint called', { 
+      userId: req.params.userId,
+      contentType: req.get('Content-Type'),
+      contentLength: req.get('Content-Length')
+    });
+
     if (!req.file) {
+      log('error', 'No file uploaded');
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
     const userId = req.params.userId;
-    const file = req.file; // This is now in memory, not on disk
+    const file = req.file;
     const contentType = file.mimetype;
-    
-    console.log(`Processing upload for user: ${userId}`);
-    console.log(`File details: name=${file.originalname}, size=${file.size}, type=${contentType}`);
-    
-    // Ensure the user has proper folder structure
-    await ensureUserFolderStructure(userId);
-    
-    // Get creationRightsId from form data (or generate a new one)
     const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
-    console.log(`Using creationRightsId: ${creationRightsId}`);
     
-    // Create file info object
-    const fileInfo = {
-      originalName: file.originalname,
-      filename: file.originalname, // Use original name since we don't have a disk filename
-      mimetype: contentType,
-      size: file.size,
+    log('info', 'File details received', {
+      fileSize: file.size,
+      fileName: file.originalname,
+      fileMimetype: contentType,
       creationRightsId: creationRightsId
-    };
+    });
     
-    // Ensure assetFolderPath exists first
-    const bucket = storage.bucket(BUCKET_NAME);
-    const assetFolderPath = `users/${userId}/creations/assets/${creationRightsId}`;
-    
-    // Create the asset folder structure
-    try {
-      console.log(`Creating asset folder structure: ${assetFolderPath}`);
-      await bucket.file(`${assetFolderPath}/.keep`).save('', {
-        contentType: 'text/plain'
-      });
-    } catch (folderError) {
-      console.error(`Error creating asset folder: ${folderError.message}`);
-      // Continue as the file upload might still succeed
+    // Check if storage is initialized
+    if (!storage) {
+      log('error', 'Storage is not initialized');
+      return res.status(500).json({ error: 'Cloud storage not available' });
     }
     
-    // Upload the file to Google Cloud Storage
     try {
-      const gcsFilePath = `${assetFolderPath}/${file.originalname}`;
-      console.log(`Uploading file to: ${gcsFilePath}`);
+      // Get bucket reference
+      const bucket = storage.bucket(BUCKET_NAME);
+      log('info', 'Using storage bucket', { bucketName: BUCKET_NAME });
       
+      // Path for the file
+      const gcsFilePath = `Creations/${userId}/${creationRightsId}/${file.originalname}`;
+      log('info', 'Target path determined', { path: gcsFilePath });
+      
+      // Test bucket access
+      try {
+        log('info', 'Testing bucket access');
+        const [files] = await bucket.getFiles({ maxResults: 1 });
+        log('info', 'Bucket access successful', { filesFound: files.length });
+      } catch (bucketError) {
+        log('error', 'Bucket access test failed', {
+          errorMessage: bucketError.message,
+          errorCode: bucketError.code,
+          errorName: bucketError.name,
+          stackTrace: bucketError.stack
+        });
+        
+        return res.status(500).json({ 
+          error: 'Failed to access storage bucket', 
+          details: bucketError.message,
+          code: bucketError.code || 'unknown'
+        });
+      }
+      
+      // Create file reference
       const gcsFile = bucket.file(gcsFilePath);
+      log('info', 'Created file reference');
       
-      // Create a writable stream to GCS
+      // Create write stream
+      log('info', 'Creating write stream');
       const stream = gcsFile.createWriteStream({
         metadata: {
           contentType: contentType,
-          cacheControl: 'no-cache, max-age=0'
+          cacheControl: 'public, max-age=86400'
         },
-        resumable: false, // For small files, this is faster
-        public: true
+        resumable: false
       });
       
-      // Handle errors and completion
+      // Stream promise with detailed error reporting
       const streamPromise = new Promise((resolve, reject) => {
         stream.on('error', (err) => {
-          console.error(`Stream error uploading ${file.originalname}:`, err);
+          log('error', 'Stream encountered error', {
+            errorMessage: err.message,
+            errorCode: err.code,
+            errorName: err.name,
+            stackTrace: err.stack
+          });
           reject(err);
         });
         
         stream.on('finish', () => {
-          // Get the public URL
-          const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
-          fileInfo.gcsUrl = publicUrl;
-          fileInfo.url = publicUrl;
-          console.log(`File uploaded successfully: ${publicUrl}`);
+          log('info', 'Stream finished successfully');
           resolve();
         });
       });
       
-      // Write the buffer to the stream
+      // Log before writing buffer
+      log('info', 'Writing buffer to stream', { 
+        bufferLength: file.buffer.length,
+        bufferExists: !!file.buffer
+      });
+      
+      // Write buffer to stream
       stream.end(file.buffer);
       
-      // Wait for the stream to finish
+      // Wait for stream to complete
+      log('info', 'Waiting for stream promise to resolve');
       await streamPromise;
+      log('info', 'Stream promise resolved - file upload completed');
       
-      // Also save a metadata file for this upload in the same folder
-      const uploadMetadata = {
-        creationRightsId,
-        originalName: file.originalname,
-        contentType,
-        size: file.size,
-        uploadDate: new Date().toISOString(),
-        uploadedBy: userId,
-        gcsUrl: fileInfo.gcsUrl,
-        url: fileInfo.url
-      };
+      // Generate public URL
+      const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
+      log('info', 'Generated public URL', { url: publicUrl });
       
-      try {
-        const metadataPath = `${assetFolderPath}/upload-metadata.json`;
-        await bucket.file(metadataPath).save(
-          JSON.stringify(uploadMetadata, null, 2),
-          { contentType: 'application/json' }
-        );
-        console.log(`Saved upload metadata to ${metadataPath}`);
-      } catch (metadataError) {
-        console.error('Error saving upload metadata:', metadataError);
-        // Continue as this is not critical
-      }
-    } catch (gcsError) {
-      console.error('Error uploading to GCS:', gcsError);
+      // Return success response
+      log('info', 'Returning success response');
+      return res.status(200).json({
+        success: true,
+        file: {
+          originalName: file.originalname,
+          mimetype: contentType,
+          size: file.size,
+          creationRightsId,
+          gcsUrl: publicUrl,
+          url: publicUrl
+        }
+      });
+    } catch (uploadError) {
+      // Log detailed upload error
+      log('error', 'Creation upload process failed', {
+        errorMessage: uploadError.message,
+        errorCode: uploadError.code || 'unknown',
+        errorName: uploadError.name,
+        stackTrace: uploadError.stack,
+        // Additional context for debugging
+        userId: userId,
+        fileName: file?.originalname || 'unknown',
+        fileSize: file?.size || 0
+      });
+      
       return res.status(500).json({ 
-        error: 'Failed to upload to cloud storage',
-        message: gcsError.message,
-        details: gcsError.stack
+        error: 'Upload failed',
+        message: uploadError.message,
+        code: uploadError.code || 'unknown'
       });
     }
-    
-    // Return success with file info
-    res.status(200).json({
-      success: true,
-      file: fileInfo
-    });
   } catch (error) {
-    console.error('File upload error:', error);
+    // Log main handler errors
+    log('error', 'Main handler caught exception', {
+      errorMessage: error.message,
+      errorStack: error.stack,
+      errorName: error.name,
+      errorCode: error.code
+    });
+    
     res.status(500).json({ 
-      error: 'File upload failed',
+      error: 'Server error',
       message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      code: error.code || 'unknown'
     });
   }
 });
-// Add this to server/index.js
-
 // Proxy endpoint for GCS images
 app.get('/api/images/:userId/:objectPath(*)', async (req, res) => {
   try {
@@ -985,75 +993,5 @@ const ensureCreationsMetadata = async (userId) => {
   }
 };
 
-app.get('/api/diagnostics/upload/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    
-    // Check if we can reach the user folder
-    if (!storage) {
-      return res.status(500).json({ 
-        error: 'Storage not initialized',
-        environment: {
-          BUCKET_NAME,
-          NODE_ENV: process.env.NODE_ENV,
-          storageAvailable: !!storage
-        }
-      });
-    }
-    
-    // Check endpoints
-    const endpointInfo = {
-      uploadEndpoint: `/api/users/${userId}/upload`,
-      method: 'POST',
-      contentType: 'multipart/form-data',
-      routeRegistration: true,
-      userExists: false,
-      folderExists: false
-    };
-    
-    // Check if user folder exists
-    try {
-      const bucket = storage.bucket(BUCKET_NAME);
-      const [files] = await bucket.getFiles({ prefix: `users/${userId}/`, maxResults: 1 });
-      endpointInfo.userExists = files.length > 0;
-      
-      // Check specific creations folder
-      const [creationFiles] = await bucket.getFiles({ 
-        prefix: `users/${userId}/creations/`, 
-        maxResults: 1 
-      });
-      endpointInfo.folderExists = creationFiles.length > 0;
-      
-      // If folders don't exist, try to create them
-      if (!endpointInfo.folderExists) {
-        await ensureUserFolderStructure(userId);
-        endpointInfo.folderCreationAttempted = true;
-        
-        // Check again
-        const [newFiles] = await bucket.getFiles({ 
-          prefix: `users/${userId}/creations/`, 
-          maxResults: 1 
-        });
-        endpointInfo.folderExistsAfterCreation = newFiles.length > 0;
-      }
-    } catch (error) {
-      endpointInfo.folderCheckError = error.message;
-    }
-    
-    // Return diagnostic info
-    res.status(200).json({
-      userId,
-      timestamp: new Date().toISOString(),
-      endpointInfo,
-      server: {
-        nodejs: process.version,
-        platform: process.platform
-      }
-    });
-  } catch (error) {
-    console.error('Error in upload diagnostics:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 

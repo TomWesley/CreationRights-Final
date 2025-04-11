@@ -12,9 +12,8 @@ import { useAppContext } from '../../contexts/AppContext';
 const MetadataEditor = ({ creation, onCancel }) => {
   const [formFields, setFormFields] = useState([]);
   const [formValues, setFormValues] = useState({});
-  const [selectedFolder, setSelectedFolder] = useState(creation.folderId || '');
   const [missingRequiredFields, setMissingRequiredFields] = useState([]);
-  const { currentUser, folders, buildBreadcrumbs, handleSubmit } = useAppContext();
+  const { currentUser, handleSubmit } = useAppContext();
 
   // Initialize form fields and values
   useEffect(() => {
@@ -31,7 +30,6 @@ const MetadataEditor = ({ creation, onCancel }) => {
     const initialValues = { ...creation.metadata };
     
     setFormValues(initialValues);
-    setSelectedFolder(creation.folderId || '');
   }, [creation]);
 
   // Handle form input changes
@@ -48,10 +46,6 @@ const MetadataEditor = ({ creation, onCancel }) => {
     }
   };
 
-  const handleFolderChange = (e) => {
-    setSelectedFolder(e.target.value);
-  };
-
   // Validate form and submit
   const handleSubmitForm = (e) => {
     e.preventDefault();
@@ -66,10 +60,9 @@ const MetadataEditor = ({ creation, onCancel }) => {
       return;
     }
     
-    // Create an updated creation object with the new metadata and folder
+    // Create an updated creation object with the new metadata
     const updatedCreation = {
       ...creation,
-      folderId: selectedFolder,
       // Important: We're maintaining any existing fields in the metadata
       metadata: formValues
     };
@@ -133,30 +126,10 @@ const MetadataEditor = ({ creation, onCancel }) => {
     <div className="metadata-editor">
       <Card>
         <CardHeader>
-          <CardTitle>Edit Metadata & Folder</CardTitle>
+          <CardTitle>Edit Metadata</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmitForm}>
-            <div className="mb-6">
-              <Label htmlFor="folder">Folder</Label>
-              <select
-                id="folder"
-                name="folder"
-                value={selectedFolder}
-                onChange={handleFolderChange}
-                className="w-full rounded-md border border-gray-300 p-2 mt-1"
-              >
-                <option value="">Root (No Folder)</option>
-                {folders.map(folder => (
-                  <option key={folder.id} value={folder.id}>
-                    {buildBreadcrumbs(folder.id).map(f => f.name).join(' / ')}
-                    {buildBreadcrumbs(folder.id).length > 0 ? ' / ' : ''}
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-700 mb-2">
                 {creation.metadata.category || creation.type} Metadata

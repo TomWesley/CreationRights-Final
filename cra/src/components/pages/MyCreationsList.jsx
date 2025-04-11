@@ -1,4 +1,4 @@
-// src/components/pages/MyCreationsList.jsx
+// src/components/pages/MyCreationsList.jsx - Updated with upload button
 
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, Cloud } from 'lucide-react';
@@ -18,7 +18,8 @@ const MyCreationsList = () => {
     setActiveTab,
     isLoading,
     setIsLoading,
-    currentUser
+    currentUser,
+    setActiveView
   } = useAppContext();
   
   // Local state
@@ -123,6 +124,11 @@ const MyCreationsList = () => {
     alert('Edit functionality will be implemented in the future.');
   };
   
+  // Navigate to upload creation page
+  const navigateToUpload = () => {
+    setActiveView('uploadCreation');
+  };
+  
   // Reset mock data for testing
   const resetMockData = () => {
     if (Array.isArray(mockCreationsData)) {
@@ -164,10 +170,7 @@ const MyCreationsList = () => {
           <Button 
             variant="default" 
             className="upload-button"
-            onClick={() => {
-              // For now, just show a message since upload is not functional yet
-              alert('Upload functionality coming soon!');
-            }}
+            onClick={navigateToUpload}
           >
             <Plus className="button-icon-small mr-1" /> Upload Creation
           </Button>
@@ -204,10 +207,7 @@ const MyCreationsList = () => {
               </p>
               <div className="flex flex-col items-center gap-2">
                 <Button
-                  onClick={() => {
-                    // For now, just show a message since upload is not functional yet
-                    alert('Upload functionality coming soon!');
-                  }}
+                  onClick={navigateToUpload}
                 >
                   <Plus className="h-4 w-4 mr-2" /> Upload Creation
                 </Button>

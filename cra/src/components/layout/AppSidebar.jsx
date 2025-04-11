@@ -14,8 +14,6 @@ const AppSidebar = () => {
     setIsMobileMenuOpen,
     activeView,
     setActiveView,
-    setCurrentFolder,
-    setBreadcrumbs,
     currentUser
   } = useAppContext();
   
@@ -66,8 +64,7 @@ const AppSidebar = () => {
               <button
                 className={`nav-item ${activeView === 'myCreations' || activeView === 'allCreations' ? 'nav-active' : ''}`}
                 onClick={() => {
-                  setCurrentFolder(null);
-                  setBreadcrumbs([]);
+                
                   setActiveView(isAgency ? 'allCreations' : 'myCreations');
                   setIsMobileMenuOpen(false);
                 }}

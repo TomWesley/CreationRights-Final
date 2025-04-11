@@ -1,4 +1,4 @@
-// src/App.jsx - Updated with Social Media Page
+// src/App.jsx - Updated to include Toast Provider
 import MyCreationsList from './components/pages/MyCreationsList';
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
@@ -13,7 +13,8 @@ import CreatorManagement from './components/pages/CreatorManagement';
 import Settings from './components/pages/Settings';
 import NewFolderModal from './components/shared/NewFolderModal';
 import LoadingIndicator from './components/shared/LoadingIndicator';
-import YouTubeImport from './components/pages/YouTubeImport';
+
+import UploadCreation from './components/pages/UploadCreation'; // Import the new component
 
 import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
@@ -23,6 +24,8 @@ import LicensesPage from './components/pages/LicensesPage';
 
 import ChatPage from './components/pages/ChatPage';
 import Footer from './components/layout/Footer';
+import { ToastProvider } from './components/ui/use-toast';
+import { Toaster } from './components/ui/toaster';
 
 const AppContent = () => {
   const { 
@@ -51,15 +54,16 @@ const AppContent = () => {
       
       // Creator-specific views
       case 'myCreations':
-        return <MyCreationsList />; // Updated to use MyCreationsList
-      case 'youtubeImport':
-        return <YouTubeImport />;
+        return <MyCreationsList />;
+      
+      case 'uploadCreation':
+        return <UploadCreation />; // Add the new route
       
       // Social Media page - available for all user types
       case 'socialMedia':
         return <SocialMediaPage />;
 
-        // Add the licenses case
+      // Add the licenses case
       case 'licenses':
         return <LicensesPage />;
         
@@ -102,17 +106,17 @@ const AppContent = () => {
       {showNewFolderModal && <NewFolderModal />}
       {isLoading && <LoadingIndicator />}
       <Footer />
+      <Toaster />
     </div>
-  
-   
-
   );
 };
 
 const App = () => {
   return (
     <AppProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AppProvider>
   );
 };

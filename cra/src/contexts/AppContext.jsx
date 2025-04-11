@@ -5,14 +5,29 @@ import {
   createUserWithEmail, 
   logoutUser, 
   getUserProfile,
-  updateUserProfile as firebaseUpdateUserProfile
+  updateUserProfile as firebaseUpdateUserProfile,
+  db
 } from '../services/firebase';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy,
+  setDoc,
+  getDoc
+} from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
   mapTypeToMetadataCategory,
   generateCreationRightsId
 } from '../services/metadataExtraction';
-import { loadFolders, loadCreations, saveFolders, saveCreations } from '../services/api';
+import { saveCreations } from '../services/api';
 
 // Create context
 export const AppContext = createContext();
@@ -31,14 +46,10 @@ export const AppProvider = ({ children }) => {
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+
   
   // Content state
-  const [folders, setFolders] = useState([]);
   const [creations, setCreations] = useState([]);
-  const [currentFolder, setCurrentFolder] = useState(null);
-  const [expandedFolders, setExpandedFolders] = useState({});
-  const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [currentCreation, setCurrentCreation] = useState({
     id: '',
     title: '',
@@ -46,7 +57,6 @@ export const AppProvider = ({ children }) => {
     dateCreated: '',
     rights: '',
     notes: '',
-    folderId: '',
     tags: [],
     licensingCost: '',
     status: 'draft'
@@ -54,7 +64,6 @@ export const AppProvider = ({ children }) => {
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [newFolderName, setNewFolderName] = useState('');
   
   // Login credentials
   const [loginCredentials, setLoginCredentials] = useState({ 
@@ -113,10 +122,9 @@ export const AppProvider = ({ children }) => {
         setIsAuthenticated(false);
         
         // Clear data
-        setFolders([]);
+
         setCreations([]);
-        setCurrentFolder(null);
-        setBreadcrumbs([]);
+
       }
       
       setIsLoading(false);
@@ -134,27 +142,45 @@ export const AppProvider = ({ children }) => {
   }, [activeView, isAuthenticated]);
 
   // Load user data (folders and creations)
-  const loadUserData = async (email) => {
+  const loadUserData = async (userId) => {
     try {
       setIsLoading(true);
-      console.log(`Loading data for user: ${email}`);
+      console.log(`Loading data for user: ${userId}`);
       
-      // Clear existing data first to prevent mixing
-      setFolders([]);
+      // Clear existing data
       setCreations([]);
       
-      // Try to load folders from server
-      const userFolders = await loadFolders(email);
-      if (userFolders && userFolders.length > 0) {
-        console.log(`Loaded ${userFolders.length} folders for user ${email}`);
-        setFolders(userFolders);
+      // Load creations from Firestore
+      try {
+        const creationsRef = collection(db, 'users', userId, 'creations');
+        const creationsQuery = query(creationsRef, orderBy('dateCreated', 'desc'));
+        const creationsSnapshot = await getDocs(creationsQuery);
+        
+        const userCreations = [];
+        creationsSnapshot.forEach((doc) => {
+          userCreations.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+        
+        console.log(`Loaded ${userCreations.length} creations for user ${userId}`);
+        setCreations(userCreations);
+      } catch (creationsError) {
+        console.error('Error loading creations:', creationsError);
       }
       
-      // Try to load creations from server
-      const userCreations = await loadCreations(email);
-      if (userCreations && userCreations.length > 0) {
-        console.log(`Loaded ${userCreations.length} creations for user ${email}`);
-        setCreations(userCreations);
+      // If no creations found in Firestore, use mock data as fallback during development
+      if (creations.length === 0) {
+        try {
+          const mockCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
+          if (mockCreations.length > 0) {
+            console.log('Using mock creations data:', mockCreations.length);
+            setCreations(mockCreations);
+          }
+        } catch (mockError) {
+          console.error('Error loading mock data:', mockError);
+        }
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -163,34 +189,8 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Save folders when they change
-  useEffect(() => {
-    const syncFolders = async () => {
-      if (isAuthenticated && currentUser && currentUser.email && folders.length > 0) {
-        // Save folders to server
-        saveFolders(currentUser.email, folders).catch(err => {
-          console.error('Error saving folders to server:', err);
-        });
-      }
-    };
-    
-    syncFolders();
-  }, [folders, isAuthenticated, currentUser]);
 
-  // Save creations when they change
-  useEffect(() => {
-    const syncCreations = async () => {
-      if (isAuthenticated && currentUser && currentUser.email && creations.length > 0) {
-        // Save creations to server
-        saveCreations(currentUser.email, creations).catch(err => {
-          console.error('Error saving creations to server:', err);
-        });
-      }
-    };
-    
-    syncCreations();
-  }, [creations, isAuthenticated, currentUser]);
-
+ 
   // Auth actions
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -269,9 +269,7 @@ export const AppProvider = ({ children }) => {
       
       // Clear all user data
       setCreations([]);
-      setFolders([]);
-      setCurrentFolder(null);
-      setBreadcrumbs([]);
+
       
       // Reset view to dashboard and clear from localStorage
       setActiveView('dashboard');
@@ -318,15 +316,10 @@ export const AppProvider = ({ children }) => {
   const getFilteredCreations = () => {
     let filtered = [...creations];
     
-    // Filter by folder
-    if (currentFolder) {
-      filtered = filtered.filter(creation => creation.folderId === currentFolder.id);
-    }
-    
     // Filter by type (tab)
     if (activeTab !== 'all') {
       filtered = filtered.filter(creation => 
-        creation.type.toLowerCase() === activeTab
+        creation.type.toLowerCase() === activeTab.toLowerCase()
       );
     }
     
@@ -334,10 +327,12 @@ export const AppProvider = ({ children }) => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(creation => 
-        creation.title.toLowerCase().includes(query) ||
-        creation.notes.toLowerCase().includes(query) ||
-        creation.rights.toLowerCase().includes(query) ||
-        creation.tags.some(tag => tag.toLowerCase().includes(query))
+        (creation.title && creation.title.toLowerCase().includes(query)) ||
+        (creation.notes && creation.notes.toLowerCase().includes(query)) ||
+        (creation.rights && creation.rights.toLowerCase().includes(query)) ||
+        (creation.tags && Array.isArray(creation.tags) && creation.tags.some(tag => 
+          tag.toLowerCase().includes(query))
+        )
       );
     }
     
@@ -385,7 +380,6 @@ export const AppProvider = ({ children }) => {
       dateCreated: '',
       rights: '',
       notes: '',
-      folderId: currentFolder ? currentFolder.id : '',
       tags: [],
       licensingCost: '',
       status: 'draft',
@@ -401,11 +395,15 @@ export const AppProvider = ({ children }) => {
     console.log('Handling creation submission:', { creation, metadata });
     
     try {
+      if (!currentUser || !currentUser.uid) {
+        throw new Error('User not authenticated');
+      }
+      
       // Format licensing cost if provided
       const licensingCost = creation.licensingCost ? parseFloat(creation.licensingCost) : null;
       
       // Make sure we have a creation ID - generate one if needed
-      const creationId = creation.id || `c${Date.now()}`;
+      const creationId = creation.id || generateCreationRightsId();
       
       // Make sure we have proper metadata
       const creationWithMetadata = {
@@ -414,54 +412,72 @@ export const AppProvider = ({ children }) => {
         licensingCost,
         metadata: metadata || creation.metadata || {},
         dateCreated: creation.dateCreated || new Date().toISOString().split('T')[0],
-        folderId: creation.folderId || (currentFolder ? currentFolder.id : ''),
         createdBy: currentUser.email,
         createdAt: new Date().toISOString(),
-        
-        // Default status to draft if not specified
+        updatedAt: new Date().toISOString(),
         status: creation.status || 'draft'
       };
       
       console.log('Prepared creation with metadata:', creationWithMetadata);
       
-      // First, fetch existing creations to ensure we're not losing any
-      let existingCreations = [];
-      
+      // Save to Firestore
       try {
-        console.log('Fetching existing creations');
-        existingCreations = await loadCreations(currentUser.email);
-        console.log(`Loaded ${existingCreations.length} existing creations`);
-      } catch (loadError) {
-        console.error('Error loading existing creations:', loadError);
-        existingCreations = [...creations]; // Fallback to local state
+        const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
+        
+        if (editMode) {
+          // Update existing document
+          const creationRef = doc(db, 'users', currentUser.uid, 'creations', creationId);
+          await updateDoc(creationRef, creationWithMetadata);
+          console.log(`Updated creation ${creationId} in Firestore`);
+        } else {
+          // Add new document with custom ID
+          await setDoc(doc(db, 'users', currentUser.uid, 'creations', creationId), creationWithMetadata);
+          console.log(`Added new creation ${creationId} to Firestore`);
+        }
+        
+        // Update local state
+        if (editMode) {
+          const updatedCreations = creations.map(c => 
+            c.id === creationId ? creationWithMetadata : c
+          );
+          setCreations(updatedCreations);
+        } else {
+          setCreations([...creations, creationWithMetadata]);
+        }
+      } catch (firestoreError) {
+        console.error('Error saving to Firestore:', firestoreError);
+        
+        // Fall back to localStorage for demo/development
+        try {
+          const existingCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
+          
+          let updatedCreations;
+          if (editMode) {
+            updatedCreations = existingCreations.map(c => 
+              c.id === creationId ? creationWithMetadata : c
+            );
+          } else {
+            updatedCreations = [...existingCreations, creationWithMetadata];
+          }
+          
+          localStorage.setItem('mockCreations', JSON.stringify(updatedCreations));
+          setCreations(updatedCreations);
+          
+          console.log('Saved to localStorage as fallback');
+        } catch (localStorageError) {
+          console.error('Error using localStorage fallback:', localStorageError);
+          throw new Error('Failed to save creation data.');
+        }
       }
-      
-      let updatedCreations;
-      
-      if (editMode) {
-        console.log(`Updating existing creation: ${creationId}`);
-        // Update existing creation
-        updatedCreations = existingCreations.map(c => 
-          c.id === creationId ? creationWithMetadata : c
-        );
-      } else {
-        console.log(`Adding new creation: ${creationId}`);
-        // Add new creation
-        updatedCreations = [...existingCreations, creationWithMetadata];
-      }
-      
-      // Update local state immediately for better UX
-      setCreations(updatedCreations);
       
       // Reset form and navigate
       resetForm();
-      setActiveView('myCreations');
       return true;
     } catch (error) {
       console.error('Error saving creation:', error);
-      alert('Error saving your creation. Please try again.');
-      setIsLoading(false);
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -479,26 +495,73 @@ export const AppProvider = ({ children }) => {
     setActiveView('editCreation');
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete this creation?')) {
-      setIsLoading(true);
-      
-      try {
-        const updatedCreations = creations.filter(creation => creation.id !== id);
-        setCreations(updatedCreations);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error deleting creation:', error);
-        alert('Error deleting creation. Please try again.');
-        setIsLoading(false);
-      }
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this creation?')) {
+      return;
     }
-  };
-  
-  const handleUpdateCreation = (updatedCreation) => {
+    
     setIsLoading(true);
     
     try {
+      if (!currentUser || !currentUser.uid) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Delete from Firestore
+      try {
+        const creationRef = doc(db, 'users', currentUser.uid, 'creations', id);
+        await deleteDoc(creationRef);
+        console.log(`Deleted creation ${id} from Firestore`);
+      } catch (firestoreError) {
+        console.error('Error deleting from Firestore:', firestoreError);
+        // Continue to update local state even if Firestore fails
+      }
+      
+      // Update local state
+      const updatedCreations = creations.filter(creation => creation.id !== id);
+      setCreations(updatedCreations);
+      
+      // Also update localStorage as fallback
+      try {
+        const existingCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
+        const updatedMockCreations = existingCreations.filter(creation => creation.id !== id);
+        localStorage.setItem('mockCreations', JSON.stringify(updatedMockCreations));
+      } catch (localStorageError) {
+        console.error('Error updating localStorage:', localStorageError);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error deleting creation:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleUpdateCreation = async (updatedCreation) => {
+    setIsLoading(true);
+    
+    try {
+      if (!currentUser || !currentUser.uid) {
+        throw new Error('User not authenticated');
+      }
+      
+      // Update in Firestore
+      try {
+        const creationRef = doc(db, 'users', currentUser.uid, 'creations', updatedCreation.id);
+        
+        // Set updatedAt timestamp
+        updatedCreation.updatedAt = new Date().toISOString();
+        
+        await updateDoc(creationRef, updatedCreation);
+        console.log(`Updated creation ${updatedCreation.id} in Firestore`);
+      } catch (firestoreError) {
+        console.error('Error updating in Firestore:', firestoreError);
+        // Continue to update local state even if Firestore fails
+      }
+      
+      // Update state
       const updatedCreations = creations.map(creation => 
         creation.id === updatedCreation.id ? updatedCreation : creation
       );
@@ -506,8 +569,16 @@ export const AppProvider = ({ children }) => {
       // Update state
       setCreations(updatedCreations);
       
-      // Log for debugging
-      console.log(`Updated creation ${updatedCreation.id} status to ${updatedCreation.status}`);
+      // Also update localStorage as fallback
+      try {
+        const existingCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
+        const updatedMockCreations = existingCreations.map(creation => 
+          creation.id === updatedCreation.id ? updatedCreation : creation
+        );
+        localStorage.setItem('mockCreations', JSON.stringify(updatedMockCreations));
+      } catch (localStorageError) {
+        console.error('Error updating localStorage:', localStorageError);
+      }
       
       return true;
     } catch (error) {
@@ -516,119 +587,6 @@ export const AppProvider = ({ children }) => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const createFolder = () => {
-    if (!newFolderName.trim()) {
-      alert('Please enter a folder name');
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      const newFolder = {
-        id: `f${Date.now()}`,
-        name: newFolderName,
-        parentId: currentFolder ? currentFolder.id : null
-      };
-      
-      const updatedFolders = [...folders, newFolder];
-      setFolders(updatedFolders);
-      
-      setNewFolderName('');
-      setShowNewFolderModal(false);
-    } catch (error) {
-      console.error('Error creating folder:', error);
-      alert('Error creating folder. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const deleteFolder = (folderId) => {
-    if (window.confirm('Are you sure you want to delete this folder and all contents?')) {
-      setIsLoading(true);
-      
-      try {
-        // Remove the folder
-        const updatedFolders = folders.filter(folder => folder.id !== folderId);
-        
-        // Remove all subfolders
-        const allSubFolderIds = getSubFolderIds(folderId);
-        const foldersAfterSubFolderRemoval = updatedFolders.filter(
-          folder => !allSubFolderIds.includes(folder.id)
-        );
-        
-        // Remove creations in those folders
-        const updatedCreations = creations.filter(
-          creation => creation.folderId !== folderId && !allSubFolderIds.includes(creation.folderId)
-        );
-        
-        setFolders(foldersAfterSubFolderRemoval);
-        setCreations(updatedCreations);
-        
-        // If we deleted the current folder, reset to root
-        if (currentFolder && (currentFolder.id === folderId || allSubFolderIds.includes(currentFolder.id))) {
-          setCurrentFolder(null);
-          setBreadcrumbs([]);
-        }
-      } catch (error) {
-        console.error('Error deleting folder:', error);
-        alert('Error deleting folder. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  const getSubFolderIds = (folderId) => {
-    const directChildren = folders.filter(folder => folder.parentId === folderId).map(folder => folder.id);
-    let allChildren = [...directChildren];
-    
-    directChildren.forEach(childId => {
-      allChildren = [...allChildren, ...getSubFolderIds(childId)];
-    });
-    
-    return allChildren;
-  };
-
-  const toggleFolderExpanded = (folderId) => {
-    setExpandedFolders({
-      ...expandedFolders,
-      [folderId]: !expandedFolders[folderId]
-    });
-  };
-
-  const navigateToFolder = (folder) => {
-    setCurrentFolder(folder);
-    
-    // Build breadcrumbs
-    if (folder === null) {
-      setBreadcrumbs([]);
-    } else {
-      const newBreadcrumbs = buildBreadcrumbs(folder.id);
-      setBreadcrumbs(newBreadcrumbs);
-    }
-    
-    setActiveView('myCreations');
-  };
-
-  const buildBreadcrumbs = (folderId) => {
-    const breadcrumbArray = [];
-    let currentId = folderId;
-    
-    while (currentId) {
-      const folder = folders.find(f => f.id === currentId);
-      if (folder) {
-        breadcrumbArray.unshift(folder);
-        currentId = folder.parentId;
-      } else {
-        currentId = null;
-      }
-    }
-    
-    return breadcrumbArray;
   };
 
   return (
@@ -640,17 +598,11 @@ export const AppProvider = ({ children }) => {
       activeView,
       isMobileMenuOpen,
       showLoginModal,
-      showNewFolderModal,
-      folders,
       creations,
-      currentFolder,
-      expandedFolders,
-      breadcrumbs,
       currentCreation,
       editMode,
       activeTab,
       searchQuery,
-      newFolderName,
       loginCredentials,
       isLoading,
       
@@ -661,16 +613,11 @@ export const AppProvider = ({ children }) => {
       setActiveView,
       setIsMobileMenuOpen,
       setShowLoginModal,
-      setShowNewFolderModal,
-      setFolders,
       setCreations,
-      setCurrentFolder,
-      setBreadcrumbs,
       setCurrentCreation,
       setEditMode,
       setActiveTab,
       setSearchQuery,
-      setNewFolderName,
       setLoginCredentials,
       setIsLoading,
       getFilteredCreations,
@@ -685,12 +632,6 @@ export const AppProvider = ({ children }) => {
       handleEdit,
       handleDelete,
       handleUpdateCreation,
-      createFolder,
-      deleteFolder,
-      toggleFolderExpanded,
-      navigateToFolder,
-      buildBreadcrumbs,
-      getSubFolderIds,
       updateUserProfile,
       loadUserData
     }}>

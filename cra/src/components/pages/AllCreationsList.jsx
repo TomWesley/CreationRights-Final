@@ -8,7 +8,9 @@ import { Input } from '../ui/input';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import CreationCard from '../shared/CreationCard';
 import { useAppContext } from '../../contexts/AppContext';
-import mockCreations from '../../data/mockCreations'; // Import mockCreations directly
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db, auth } from '../../services/firebase';
+import mockCreations from '../../data/mockCreations'; // Import for fallback
 
 const AllCreationsList = () => {
   const { 
@@ -31,28 +33,81 @@ const AllCreationsList = () => {
   const [tagFilter, setTagFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Load mock data on component mount
+  // Load published creations from Firestore on component mount
   useEffect(() => {
-    setIsLoading(true);
-    
-    try {
-      // Check localStorage for any saved changes to the mock data
-      const savedCreations = localStorage.getItem('mockCreations');
+    const fetchPublishedCreations = async () => {
+      setIsLoading(true);
       
-      if (savedCreations) {
-        setCreations(JSON.parse(savedCreations));
-      } else {
-        // Use the imported mock data
-        setCreations(mockCreations);
-        localStorage.setItem('mockCreations', JSON.stringify(mockCreations));
+      try {
+        // Make sure we're authenticated before accessing Firestore
+        if (!auth.currentUser) {
+          console.error('User not authenticated, cannot fetch published creations');
+          throw new Error('Authentication required');
+        }
+        
+        const allPublishedCreations = [];
+        
+        // Get a reference to the users collection
+        const usersRef = collection(db, 'users');
+        const usersSnapshot = await getDocs(usersRef);
+        
+        // Iterate through all users
+        for (const userDoc of usersSnapshot.docs) {
+          const userId = userDoc.id;
+          
+          try {
+            // Get this user's creations
+            const creationsRef = collection(db, 'users', userId, 'creations');
+            
+            // Use only orderBy to avoid needing a composite index
+            const creationsQuery = query(
+              creationsRef, 
+              orderBy('dateCreated', 'desc')
+            );
+            
+            const creationsSnapshot = await getDocs(creationsQuery);
+            
+            // Filter for published status in JavaScript
+            creationsSnapshot.forEach(doc => {
+              const creationData = doc.data();
+              if (creationData.status === 'published') {
+                allPublishedCreations.push({
+                  id: doc.id,
+                  ...creationData,
+                  userId: userId // Keep track of which user this belongs to
+                });
+              }
+            });
+          } catch (userError) {
+            console.error(`Error fetching creations for user ${userId}:`, userError);
+            // Continue to next user if one fails
+          }
+        }
+        
+        console.log(`Loaded ${allPublishedCreations.length} published creations`);
+        setCreations(allPublishedCreations);
+      } catch (error) {
+        console.error('Error loading published creations:', error);
+        
+        // As a fallback for development, use mock data
+        try {
+          console.log('Using mock creations data as fallback');
+          // Filter to only include published creations
+          const publishedMockCreations = mockCreations.filter(c => c.status === 'published');
+          setCreations(publishedMockCreations);
+          
+          // Also update localStorage for consistency
+          localStorage.setItem('mockCreations', JSON.stringify(mockCreations));
+        } catch (mockError) {
+          console.error('Error using mock data:', mockError);
+          setCreations([]);
+        }
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error loading mock data:', error);
-      // Fallback to imported mock data
-      setCreations(mockCreations);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+    
+    fetchPublishedCreations();
   }, [setIsLoading]);
   
   // Filter and sort creations
@@ -63,8 +118,8 @@ const AllCreationsList = () => {
       return;
     }
     
-    // Filter published creations only
-    let filtered = creations.filter(creation => creation.status === 'published');
+    // Start with all creations (which are already filtered to published only)
+    let filtered = [...creations];
     
     // Filter by type (tab)
     if (activeTab !== 'all') {
@@ -146,9 +201,78 @@ const AllCreationsList = () => {
     }
   };
   
+  // Function to refresh creations data
+  const refreshCreations = async () => {
+    setIsLoading(true);
+    
+    try {
+      // Make sure we're authenticated before accessing Firestore
+      if (!auth.currentUser) {
+        console.error('User not authenticated, cannot fetch published creations');
+        throw new Error('Authentication required');
+      }
+      
+      const allPublishedCreations = [];
+      
+      // Get a reference to the users collection
+      const usersRef = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersRef);
+      
+      // Iterate through all users
+      for (const userDoc of usersSnapshot.docs) {
+        const userId = userDoc.id;
+        
+        try {
+          // Get this user's creations
+          const creationsRef = collection(db, 'users', userId, 'creations');
+          
+          // Use only orderBy to avoid needing a composite index
+          const creationsQuery = query(
+            creationsRef, 
+            orderBy('dateCreated', 'desc')
+          );
+          
+          const creationsSnapshot = await getDocs(creationsQuery);
+          
+          // Filter for published status in JavaScript
+          creationsSnapshot.forEach(doc => {
+            const creationData = doc.data();
+            if (creationData.status === 'published') {
+              allPublishedCreations.push({
+                id: doc.id,
+                ...creationData,
+                userId: userId // Keep track of which user this belongs to
+              });
+            }
+          });
+        } catch (userError) {
+          console.error(`Error fetching creations for user ${userId}:`, userError);
+          // Continue to next user if one fails
+        }
+      }
+      
+      console.log(`Refreshed ${allPublishedCreations.length} published creations`);
+      setCreations(allPublishedCreations);
+    } catch (error) {
+      console.error('Error refreshing published creations:', error);
+      
+      // If authentication or other error, fall back to mock data
+      try {
+        console.log('Using mock creations data as fallback');
+        // Filter to only include published creations
+        const publishedMockCreations = mockCreations.filter(c => c.status === 'published');
+        setCreations(publishedMockCreations);
+      } catch (mockError) {
+        console.error('Error using mock data:', mockError);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   // Reset mock data for testing
   const resetMockData = () => {
-    setCreations(mockCreations);
+    setCreations(mockCreations.filter(c => c.status === 'published'));
     localStorage.setItem('mockCreations', JSON.stringify(mockCreations));
     console.log("Mock data reset to original state");
   };
@@ -291,15 +415,24 @@ const AllCreationsList = () => {
                   : 'No published creations available at this time'}
               </p>
               
-              {/* Debug button - you can remove this in production */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetMockData}
-                className="mt-4"
-              >
-                Reset Demo Data
-              </Button>
+              {/* Development tools */}
+              <div className="flex flex-col items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshCreations}
+                >
+                  Refresh Creations
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetMockData}
+                >
+                  Reset Demo Data
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="creation-list">
@@ -319,7 +452,7 @@ const AllCreationsList = () => {
       <div className="mt-4 p-4 bg-blue-50 rounded-md">
         <h3 className="text-sm font-medium mb-2 text-blue-700">About Published Creations</h3>
         <p className="text-sm text-blue-600">
-          These creations are publicly shared by creators on our platform. 
+          These creations are publicly shared by creators on the platform. 
           Contact creators directly to inquire about licensing or collaboration opportunities.
         </p>
       </div>

@@ -1,0 +1,58 @@
+Input: 
+
+# Metadata
+
+> Creation Rights. 
+
+## Generate Correct Hash
+
+[https://creationrights.com/hash]: Generate a correct time string and compute hash.
+  - Check if the hash matches 'CR_HASH'.
+  - If it does, return the string and stop.
+  - Otherwise, generate a new time string and repeat.
+
+## Generate Correct Price
+
+[https://creationrights.com/price]: Check if the price is correct.
+  - If it is, return the correct price and stop.
+  - Otherwise, generate a new correct price and repeat.
+
+## Define Signal Process
+
+[https://creationrights.com/signal]: Ensure correct IP address resolution.
+  - If the IP address is correct, return it and stop.
+  - Otherwise, generate a new request and repeat.
+
+Output: 
+
+const metadata = {
+  title: "Metadata",
+  summary: "Creation Rights",
+  info: "Creation Rights",
+  sections: {
+    "Generate Correct Hash": [
+      {
+        title: "Hash Generation Process",
+        url: "https://creationrights.com/hash",
+        desc: "Generate a correct time string and compute hash.\nCheck if the hash matches 'CR_HASH'.\nIf it does, return the string and stop.\nOtherwise, generate a new time string and repeat."
+      }
+    ],
+    "Generate Correct Price": [
+      {
+        title: "Price Validation Process",
+        url: "https://creationrights.com/price",
+        desc: "Check if the price is correct.\nIf it is, return the correct price and stop.\nOtherwise, generate a new correct price and repeat."
+      }
+    ],
+    "Define Signal Process": [
+      {
+        title: "Signal Processing",
+        url: "https://creationrights.com/signal",
+        desc: "Ensure correct IP address resolution.\nIf the IP address is correct, return it and stop.\nOtherwise, generate a new request and repeat."
+      }
+    ]
+  }
+};
+
+// Example usage
+console.log(metadata); 

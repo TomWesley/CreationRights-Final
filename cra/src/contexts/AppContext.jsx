@@ -1,13 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { 
-  auth, 
-  loginWithEmail, 
-  createUserWithEmail, 
-  logoutUser, 
-  getUserProfile,
-  updateUserProfile as firebaseUpdateUserProfile,
-  db
-} from '../services/firebase';
+import { auth, db, getUserProfile, updateUserProfile as updateFirebaseUserProfile } from '../services/firebase';
+
 import { 
   getFirestore, 
   collection, 
@@ -22,7 +15,8 @@ import {
   setDoc,
   getDoc
 } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+
 import {
   mapTypeToMetadataCategory,
   generateCreationRightsId
@@ -106,7 +100,7 @@ export const AppProvider = ({ children }) => {
           }
         } catch (err) {
           console.error('Error loading user profile:', err);
-          setError(err.message);
+          
         }
       } else {
         setCurrentUser(null);
@@ -191,7 +185,7 @@ const loadUserData = async (email) => {
   const handleLogin = async (e) => {
     e?.preventDefault();
     setIsLoading(true);
-    setError(null);
+    
     
     try {
       // Sign in with Firebase Auth
@@ -214,7 +208,7 @@ const loadUserData = async (email) => {
       return true;
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.message);
+      
       setIsLoading(false);
       return false;
     }
@@ -222,7 +216,7 @@ const loadUserData = async (email) => {
 
   const handleSignup = async (signupData) => {
     setIsLoading(true);
-    setError(null);
+    
     
     try {
       // Create user in Firebase Auth
@@ -263,7 +257,6 @@ const loadUserData = async (email) => {
       return true;
     } catch (err) {
       console.error('Signup error:', err);
-      setError(err.message);
       setIsLoading(false);
       return false;
     }
@@ -278,7 +271,6 @@ const loadUserData = async (email) => {
       setCurrentUser(null);
     } catch (err) {
       console.error('Logout error:', err);
-      setError(err.message);
     } finally {
       setIsLoading(false);
     }

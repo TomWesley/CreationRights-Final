@@ -46,6 +46,7 @@ export const AppProvider = ({ children }) => {
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRegisterFlow, setShowRegisterFlow] = useState(false);
 
   
   // Content state
@@ -74,63 +75,46 @@ export const AppProvider = ({ children }) => {
 
   // Listen for Firebase Auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setIsLoading(true);
-      
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (user) {
-        console.log(`User authenticated: ${user.email}`);
-        
         try {
-          // Fetch user profile from Firestore
+          // Load user profile data from Firestore
           const userProfile = await getUserProfile(user.uid);
           
           if (userProfile) {
-            console.log('User profile found:', userProfile);
+            // Set combined user object with auth and profile data
             setCurrentUser({
               uid: user.uid,
               email: user.email,
               ...userProfile
             });
-            setUserType(userProfile.userType || 'creator');
           } else {
-            // No profile yet, create minimal one
-            console.log('No user profile found, creating minimal profile');
-            const minimalProfile = {
+            // User exists in auth but not in Firestore, create basic profile
+            const newUserProfile = {
               uid: user.uid,
               email: user.email,
-              name: user.email.split('@')[0],
+              name: user.displayName || user.email.split('@')[0],
               userType: 'creator',
               createdAt: new Date().toISOString()
             };
-            setCurrentUser(minimalProfile);
-            setUserType('creator');
             
-            // Save minimal profile to Firestore
-            await firebaseUpdateUserProfile(user.uid, minimalProfile);
+            // Save to Firestore
+            await setDoc(doc(db, 'users', user.uid), newUserProfile);
+            
+            // Update state
+            setCurrentUser(newUserProfile);
           }
-          
-          // Load user data
-          await loadUserData(user.email);
-          setIsAuthenticated(true);
-        } catch (error) {
-          console.error('Error setting up user profile:', error);
-          setIsAuthenticated(false);
+        } catch (err) {
+          console.error('Error loading user profile:', err);
+          setError(err.message);
         }
       } else {
-        console.log('User not authenticated');
         setCurrentUser(null);
-        setIsAuthenticated(false);
-        
-        // Clear data
-
-        setCreations([]);
-
       }
       
       setIsLoading(false);
     });
     
-    // Clean up subscription
     return () => unsubscribe();
   }, []);
 
@@ -205,122 +189,120 @@ const loadUserData = async (email) => {
  
   // Auth actions
   const handleLogin = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
     setIsLoading(true);
+    setError(null);
     
     try {
-      const { email, password, accountType } = loginCredentials;
+      // Sign in with Firebase Auth
+      await signInWithEmailAndPassword(
+        auth, 
+        loginCredentials.email,
+        loginCredentials.password || 'demopassword123' // For demo, use default password if none provided
+      );
       
-      if (!email || !password) {
-        throw new Error('Email and password are required');
-      }
-      
-      // Attempt to login with Firebase
-      const user = await loginWithEmail(email, password);
-      
-      // The auth state listener will handle setting up the user
-      // but let's ensure the userType is set
-      if (user) {
-        // Update user profile with accountType if needed
-        const profile = await getUserProfile(user.uid);
-        if (!profile || profile.userType !== accountType) {
-          await firebaseUpdateUserProfile(user.uid, {
-            userType: accountType
-          });
-        }
-      }
-      
+      // If successful, close the modal
       setShowLoginModal(false);
-      setActiveView('dashboard');
-    } catch (error) {
-      console.error('Login error:', error);
-      alert('Error during login. Please check your credentials and try again.');
-    } finally {
+      
+      // Clear form
+      setLoginCredentials({
+        email: '',
+        password: '',
+        accountType: 'creator'
+      });
+      
+      return true;
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(err.message);
       setIsLoading(false);
+      return false;
     }
   };
 
   const handleSignup = async (signupData) => {
     setIsLoading(true);
+    setError(null);
     
     try {
-      const { email, password, name, accountType } = signupData;
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        signupData.email,
+        signupData.password || 'demopassword123' // For demo, use default password if none provided
+      );
       
-      if (!email || !password) {
-        throw new Error('Email and password are required');
-      }
-      
-      // Create user with Firebase Auth
-      const user = await createUserWithEmail(email, password);
+      const user = userCredential.user;
       
       // Create user profile in Firestore
-      await firebaseUpdateUserProfile(user.uid, {
-        email,
-        name: name || email.split('@')[0],
-        userType: accountType || 'creator',
-        createdAt: new Date().toISOString()
+      const userProfile = {
+        uid: user.uid,
+        email: user.email,
+        name: signupData.name || signupData.email.split('@')[0],
+        userType: signupData.accountType || 'creator',
+        createdAt: new Date().toISOString(),
+        status: 'active',
+        
+        // Social links (if provided)
+        socialLinks: signupData.socialLinks || {}
+      };
+      
+      // Save to Firestore
+      await setDoc(doc(db, 'users', user.uid), userProfile);
+      
+      // Set current user
+      setCurrentUser({
+        ...userProfile,
+        uid: user.uid
       });
       
-      // Auth state listener will handle the rest
-      setShowLoginModal(false);
-      setActiveView('dashboard');
+      // Close the register flow modal
+      setShowRegisterFlow(false);
       
-      return true;
-    } catch (error) {
-      console.error('Signup error:', error);
-      alert('Error creating account. ' + error.message);
-      return false;
-    } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logoutUser();
-      
-      // Clear all user data
-      setCreations([]);
-
-      
-      // Reset view to dashboard and clear from localStorage
-      setActiveView('dashboard');
-      localStorage.removeItem('activeView');
-      
-      // Auth state listener will handle the rest
-    } catch (error) {
-      console.error('Logout error:', error);
+      return true;
+    } catch (err) {
+      console.error('Signup error:', err);
+      setError(err.message);
+      setIsLoading(false);
+      return false;
     }
   };
   
-  const updateUserProfile = async (updatedUserData) => {
+
+  const handleLogout = async () => {
     setIsLoading(true);
     
     try {
-      if (!currentUser || !currentUser.uid) {
-        throw new Error('User not authenticated');
-      }
-      
-      // Update the Firestore profile
-      await firebaseUpdateUserProfile(currentUser.uid, updatedUserData);
-      
-      // Update local state
-      setCurrentUser({
-        ...currentUser,
-        ...updatedUserData
-      });
-      
-      // Update userType if it changed
-      if (updatedUserData.userType && updatedUserData.userType !== userType) {
-        setUserType(updatedUserData.userType);
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      return false;
+      await signOut(auth);
+      setCurrentUser(null);
+    } catch (err) {
+      console.error('Logout error:', err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const updateUserProfile = async (profileData) => {
+    if (!currentUser || !currentUser.uid) {
+      throw new Error('User must be logged in to update profile');
+    }
+    
+    try {
+      // Update Firestore
+      await updateFirebaseUserProfile(currentUser.uid, profileData);
+      
+      // Update local state
+      setCurrentUser(prev => ({
+        ...prev,
+        ...profileData
+      }));
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      throw err;
     }
   };
 
@@ -361,10 +343,10 @@ const loadUserData = async (email) => {
 
   const handleLoginInput = (e) => {
     const { name, value } = e.target;
-    setLoginCredentials({
-      ...loginCredentials,
+    setLoginCredentials((prev) => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
 
   const handleTagInput = (e) => {
@@ -617,6 +599,7 @@ const loadUserData = async (email) => {
       searchQuery,
       loginCredentials,
       isLoading,
+      showRegisterFlow,
       
       // Methods
       setIsAuthenticated,
@@ -625,6 +608,7 @@ const loadUserData = async (email) => {
       setActiveView,
       setIsMobileMenuOpen,
       setShowLoginModal,
+      setShowRegisterFlow,
       setCreations,
       setCurrentCreation,
       setEditMode,

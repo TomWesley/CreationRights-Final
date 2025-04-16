@@ -1,3 +1,5 @@
+// src/components/pages/LandingPage.jsx - Updated for the new auth flow
+
 import React from 'react';
 import { FileText, Users, BarChart2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -5,10 +7,16 @@ import { Button } from '../ui/button';
 import LandingHeader from '../layout/LandingHeader';
 import Footer from '../layout/Footer';
 import LoginModal from '../auth/LoginModal';
+import RegisterFlow from '../auth/RegisterFlow';
 import { useAppContext } from '../../contexts/AppContext';
 
 const LandingPage = () => {
-  const { showLoginModal, setShowLoginModal } = useAppContext();
+  const { 
+    showLoginModal, 
+    setShowLoginModal, 
+    showRegisterFlow, 
+    setShowRegisterFlow 
+  } = useAppContext();
   
   return (
     <div className="landing-container">
@@ -25,8 +33,8 @@ const LandingPage = () => {
               across all your creative endeavors.
             </p>
             <div className="hero-actions">
-              <Button size="lg" onClick={() => setShowLoginModal(true)} className="get-started-button">
-                Get Started
+              <Button size="lg" onClick={() => setShowRegisterFlow(true)} className="get-started-button">
+                Sign Up
               </Button>
               <Button size="lg" variant="outline" className="learn-more-button">
                 Learn More
@@ -77,7 +85,9 @@ const LandingPage = () => {
       
       <Footer />
       
+      {/* Authentication modals */}
       {showLoginModal && <LoginModal />}
+      {showRegisterFlow && <RegisterFlow />}
     </div>
   );
 };

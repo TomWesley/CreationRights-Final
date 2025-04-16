@@ -15,3 +15,59 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Add this to your existing CSS file */
+
+/* Additional styles for watermarked images */
+.watermark-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.watermark-pattern {
+  width: 100%;
+  height: 100%;
+  background-repeat: space space;
+  transform: rotate(-20deg);
+}
+
+.watermark-single {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 150px;
+}
+
+/* Disable image selection and right-click save */
+.creation-thumbnail img {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  pointer-events: auto;
+}
+
+/* Make sure watermarked images maintain their aspect ratio */
+.creation-thumbnail {
+  position: relative;
+}
+
+/* Add a subtle indication for protected content */
+.creation-thumbnail.protected::after {
+  content: "Protected";
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 8px;
+  padding: 2px 4px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  border-radius: 2px;
+  z-index: 20;
+}

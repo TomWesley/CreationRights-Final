@@ -1,6 +1,6 @@
 /* Base Styles */
 :root {
-    --primary-color: #3b82f6;
+    --primary-color: #3d3f43;
     --primary-hover: #2563eb;
     --destructive-color: #ef4444;
     --destructive-hover: #dc2626;
@@ -38,7 +38,7 @@
   }
   
   .header-content {
-    max-width: 1200px;
+    max-width: 3000px;
     margin: 0 auto;
     padding: 1rem;
     display: flex;
@@ -52,9 +52,11 @@
   }
   
   .logo {
+
     height: 2rem;
+    align-items: left;
     width: auto;
-    margin-right: 0.5rem;
+    margin-right: 1rem;
   }
   
   .app-title {
@@ -1139,6 +1141,215 @@
   .folder-delete:hover {
     color: var(--destructive-color);
   }
+
+  /* Add these styles to your CreationRightsApp.css file */
+
+/* Authentication Flow Styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.register-flow-container {
+  width: 100%;
+  max-width: 32rem;
+  animation: slideUp 0.3s ease-out;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Social Button Styles */
+.social-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-color);
+  background-color: white;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.social-button:hover {
+  background-color: #f9fafb;
+  border-color: var(--primary-color);
+}
+
+.social-button-icon {
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+.social-button-text {
+  margin-left: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Media Card Styles */
+.social-media-card {
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.social-media-card:hover {
+  border-color: var(--primary-color);
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.social-media-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.social-media-icon {
+  height: 1.5rem;
+  width: 1.5rem;
+  margin-right: 0.5rem;
+}
+
+.social-media-title {
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+/* Step Indicator Styles */
+.step-indicator {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.step-circle {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-weight: 600;
+  position: relative;
+  z-index: 10;
+}
+
+.step-circle.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.step-circle.completed {
+  background-color: #10b981;
+  color: white;
+}
+
+.step-line {
+  flex-grow: 1;
+  height: 2px;
+  background-color: #e5e7eb;
+  margin: 0 0.5rem;
+}
+
+.step-line.active {
+  background-color: var(--primary-color);
+}
+
+.step-label {
+  position: absolute;
+  width: 100%;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #6b7280;
+  top: 2.5rem;
+  font-weight: 500;
+}
+
+/* Form Transition Animation */
+.form-step {
+  animation: fadeSlide 0.3s ease-out;
+}
+
+@keyframes fadeSlide {
+  from { 
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 640px) {
+  .register-flow-container {
+    max-width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  
+  .social-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .step-label {
+    display: none;
+  }
+}
+
+/* Enhanced Animation for Social Media Cards */
+.social-media-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.social-media-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.8) 38%, rgba(255,255,255,0) 48%);
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.social-media-card:hover::after {
+  opacity: 1;
+  animation: shine 1.5s infinite;
+}
+
+@keyframes shine {
+  to {
+    background-position: -100% 0;
+  }
+}
   
   /* Media Queries for Mobile Responsiveness */
   @media (max-width: 640px) {

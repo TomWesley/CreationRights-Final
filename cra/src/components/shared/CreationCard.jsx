@@ -1,4 +1,4 @@
-// src/components/shared/CreationCard.jsx - Modified with toggle publish and Stripe payment functionality
+// src/components/shared/CreationCard.jsx - Updated with watermarking functionality
 
 import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/card';
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { getProxiedImageUrl } from '../../services/fileUpload';
 import StripePaymentModal from './StripePaymentModal';
+import WatermarkedImage from './WatermarkedImage';
 
 const CreationCard = ({ 
   creation, 
@@ -94,51 +95,91 @@ const CreationCard = ({
   // Determine if this has metadata
   const hasMetadata = creation.metadata && Object.keys(creation.metadata).length > 0;
 
-  const getProxiedThumbnail = (url) => {
-    if (!url || !currentUser || !currentUser.email) return url;
-    return getProxiedImageUrl(url, currentUser.email);
-  };
-
   // Generate preview based on content type
   const renderContentPreview = () => {
-    // For images
+    // For images - now using WatermarkedImage for this type when in agency view
     if (creation.type === 'Image' || creation.type === 'Photography') {
       if (creation.fileUrl || creation.thumbnailUrl) {
-        const imageUrl = currentUser ? 
-          getProxiedThumbnail(creation.fileUrl || creation.thumbnailUrl) : 
-          (creation.fileUrl || creation.thumbnailUrl);
-          
-        return (
-          <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
-            <img 
-              src={imageUrl} 
-              alt={creation.title} 
-              className="w-full h-full object-cover"
-            />
-          </div>
-        );
+        const imageUrl = creation.fileUrl || creation.thumbnailUrl;
+        
+        // Use watermarked image in agency view
+        if (isAgencyView) {
+          return (
+            <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
+              <WatermarkedImage 
+                src={imageUrl} 
+                alt={creation.title} 
+                className="w-full h-full"
+                getProxiedImageUrl={getProxiedImageUrl}
+                currentUser={currentUser}
+                watermarkSrc="/images/watermark.png"
+                watermarkOpacity={0.3}
+                watermarkPattern={true}
+              />
+            </div>
+          );
+        } else {
+          // Regular image for creator's view
+          const proxiedImageUrl = currentUser ? 
+            getProxiedImageUrl(imageUrl, currentUser.email) : 
+            imageUrl;
+            
+          return (
+            <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden">
+              <img 
+                src={proxiedImageUrl} 
+                alt={creation.title} 
+                className="w-full h-full object-cover"
+              />
+            </div>
+          );
+        }
       }
     }
     
-    // For videos
+    // For videos - also using WatermarkedImage for thumbnails in agency view
     else if (creation.type === 'Video') {
       if (creation.thumbnailUrl) {
-        const thumbnailUrl = currentUser ? 
-          getProxiedThumbnail(creation.thumbnailUrl) : 
-          creation.thumbnailUrl;
-          
-        return (
-          <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden relative">
-            <img 
-              src={thumbnailUrl} 
-              alt={creation.title} 
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20">
-              <Play className="w-8 h-8 text-white" />
+        const thumbnailUrl = creation.thumbnailUrl;
+        
+        // Use watermarked thumbnail in agency view
+        if (isAgencyView) {
+          return (
+            <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden relative">
+              <WatermarkedImage 
+                src={thumbnailUrl} 
+                alt={creation.title}
+                className="w-full h-full"
+                getProxiedImageUrl={getProxiedImageUrl}
+                currentUser={currentUser}
+                watermarkSrc="/images/watermark.png"
+                watermarkOpacity={0.3}
+                watermarkPattern={true}
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20">
+                <Play className="w-8 h-8 text-white" />
+              </div>
             </div>
-          </div>
-        );
+          );
+        } else {
+          // Regular thumbnail for creator's view
+          const proxiedThumbnailUrl = currentUser ? 
+            getProxiedImageUrl(thumbnailUrl, currentUser.email) : 
+            thumbnailUrl;
+            
+          return (
+            <div className="creation-thumbnail w-40 h-28 bg-gray-200 overflow-hidden relative">
+              <img 
+                src={proxiedThumbnailUrl} 
+                alt={creation.title} 
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20">
+                <Play className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          );
+        }
       }
     }
     

@@ -82,14 +82,14 @@ const LandingHeader = () => {
               {resourcesDropdownOpen && (
                 <div className="dropdown-menu absolute top-full left-0 mt-1 bg-white shadow-md rounded-md py-1 w-48 z-10">
                   <a 
-                    href="#" 
+                    href="https://creationrights.com/news/" 
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => setResourcesDropdownOpen(false)}
                   >
                     News
                   </a>
                   <a 
-                    href="#" 
+                    href="https://creationrights.com/frequently-asked-questions/" 
                     className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     onClick={() => setResourcesDropdownOpen(false)}
                   >
@@ -99,7 +99,7 @@ const LandingHeader = () => {
               )}
             </div>
             
-            <a href="#" className="nav-link text-gray-700 hover:text-blue-600 font-medium">
+            <a href="https://creationrights.com/about-us/" className="nav-link text-gray-700 hover:text-blue-600 font-medium">
               About
             </a>
           </nav>

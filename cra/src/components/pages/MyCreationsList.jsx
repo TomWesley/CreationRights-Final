@@ -1,7 +1,7 @@
-// src/components/pages/MyCreationsList.jsx - No Firestore listeners
+// src/components/pages/MyCreationsList.jsx - Fixed re-rendering issues
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Cloud } from 'lucide-react';
+import { Search, Plus, Cloud, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,17 +14,21 @@ import {
   getDocs, 
   query, 
   orderBy, 
-  getDoc,
-  doc,
   limit
 } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 
+// Store loaded data in a module-level variable to persist between unmounts
+let cachedCreations = [];
+let dataLoaded = false;
+let currentUserId = null;
+
 const MyCreationsList = () => {
+  console.log("MyCreationsList: Component rendering");
+  
   const { 
     activeTab,
     setActiveTab,
-    isLoading,
     setIsLoading,
     currentUser,
     setActiveView,
@@ -36,110 +40,98 @@ const MyCreationsList = () => {
   
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
-  const [creations, setCreations] = useState([]);
+  const [creations, setCreations] = useState(cachedCreations);
   const [filteredCreations, setFilteredCreations] = useState([]);
-  const [loadAttempted, setLoadAttempted] = useState(false);
+  const [dataFetching, setDataFetching] = useState(false);
   
   // Track if component is mounted
   const isMounted = useRef(true);
+  const dataFetchRequested = useRef(false);
   
-  // Cleanup on unmount
+  // Set up mount/unmount tracking
   useEffect(() => {
+    console.log("MyCreationsList: Component mounted");
+    isMounted.current = true;
+    dataFetchRequested.current = false;
+    
+    // Turn off global loading immediately
+    setIsLoading(false);
+    
     return () => {
+      console.log("MyCreationsList: Component unmounting");
       isMounted.current = false;
-      console.log("MyCreationsList unmounted");
+      dataFetchRequested.current = false;
     };
-  }, []);
+  }, [setIsLoading]);
   
-  // Load data directly from Firebase - ONE TIME ONLY
+  // Load data in the background - with better conditions to prevent re-renders
   useEffect(() => {
-    // Skip if we've already attempted to load
-    if (loadAttempted) {
-      console.log("MyCreationsList: Already attempted to load data, skipping");
+    // Skip if already fetching, already loaded for this user, or request already made
+    if (
+      dataFetching || 
+      dataFetchRequested.current || 
+      (dataLoaded && currentUserId === currentUser?.uid)
+    ) {
       return;
     }
     
-    // Skip loading if we don't have a user yet
+    // Skip if we don't have a user yet
     if (!currentUser || !currentUser.uid) {
       console.log("MyCreationsList: No user available yet");
       return;
     }
     
+    // Mark that we've requested data fetch for this render cycle
+    dataFetchRequested.current = true;
+    
     const loadCreations = async () => {
-      console.log("MyCreationsList: Starting to load data");
-      setIsLoading(true);
+      console.log(`MyCreationsList: Background loading data for ${currentUser.uid}`);
+      setDataFetching(true);
       
       try {
-        console.log(`MyCreationsList: Loading creations for user ${currentUser.uid}`);
+        // Fetch creations directly from Firebase
+        const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
+        const creationsQuery = query(
+          creationsRef, 
+          orderBy('dateCreated', 'desc'),
+          limit(50)
+        );
         
-        // Mark that we've attempted to load
-        setLoadAttempted(true);
+        const snapshot = await getDocs(creationsQuery);
         
-        // First, check if user document exists
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        const userDocSnapshot = await getDoc(userDocRef);
-        
-        if (!userDocSnapshot.exists()) {
-          console.log(`MyCreationsList: User document doesn't exist for ${currentUser.uid}`);
-          if (isMounted.current) {
-            setCreations([]);
-            setIsLoading(false);
-          }
-          return;
-        }
-        
-        // Now try to get creations - but don't fail if collection doesn't exist
-        try {
-          // Fetch creations directly from Firebase - WITH LIMIT
-          const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
-          const creationsQuery = query(
-            creationsRef, 
-            orderBy('dateCreated', 'desc'),
-            limit(50) // Limit to 50 items to avoid loading too much
-          );
-          
-          const snapshot = await getDocs(creationsQuery);
-          
-          const userCreations = [];
-          snapshot.forEach(doc => {
-            userCreations.push({
-              id: doc.id,
-              ...doc.data()
-            });
+        const userCreations = [];
+        snapshot.forEach(doc => {
+          userCreations.push({
+            id: doc.id,
+            ...doc.data()
           });
-          
-          console.log(`MyCreationsList: Loaded ${userCreations.length} creations`);
-          
-          if (isMounted.current) {
-            setCreations(userCreations);
-          }
-        } catch (collectionError) {
-          // If there's an error with the collection (might not exist yet),
-          // just set empty creations
-          console.log("MyCreationsList: Creations collection doesn't exist or couldn't be accessed");
-          console.error(collectionError);
-          
-          if (isMounted.current) {
-            setCreations([]);
-          }
+        });
+        
+        console.log(`MyCreationsList: Loaded ${userCreations.length} creations for ${currentUser.uid}`);
+        
+        // Update cache variables
+        cachedCreations = userCreations;
+        dataLoaded = true;
+        currentUserId = currentUser.uid;
+        
+        // Update state if still mounted
+        if (isMounted.current) {
+          setCreations(userCreations);
         }
       } catch (error) {
-        console.error('MyCreationsList: Error loading creations:', error);
-        // Initialize with empty array on error
-        if (isMounted.current) {
-          setCreations([]);
-        }
+        console.error('MyCreationsList: Error fetching creations:', error);
       } finally {
         if (isMounted.current) {
-          setIsLoading(false);
+          setDataFetching(false);
         }
       }
     };
     
+    // Start loading data
     loadCreations();
-  }, [currentUser, setIsLoading, loadAttempted]);
+  }, [currentUser, dataFetching]);
   
-  // Filter creations based on tab and search query
+  // Filter creations based on tab and search query - with memo to reduce calculations
   useEffect(() => {
     if (!Array.isArray(creations)) {
       console.error('Creations is not an array:', creations);
@@ -214,60 +206,63 @@ const MyCreationsList = () => {
     setActiveView('uploadCreation');
   };
   
-  // Refresh creations data - with forced reload
+  // Refresh creations data
   const refreshCreations = async () => {
     if (!currentUser || !currentUser.uid) {
       console.log("Cannot refresh: No user available");
       return;
     }
     
-    setIsLoading(true);
+    setDataFetching(true);
+    dataLoaded = false; // Force reload
     
     try {
-      console.log(`Refreshing creations for user ${currentUser.uid}`);
+      // Fetch creations directly from Firebase
+      const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
+      const creationsQuery = query(
+        creationsRef, 
+        orderBy('dateCreated', 'desc'),
+        limit(50)
+      );
       
-      try {
-        // Fetch creations directly from Firebase
-        const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
-        const creationsQuery = query(
-          creationsRef, 
-          orderBy('dateCreated', 'desc'),
-          limit(50) // Limit to 50 items
-        );
-        
-        const snapshot = await getDocs(creationsQuery);
-        
-        const userCreations = [];
-        snapshot.forEach(doc => {
-          userCreations.push({
-            id: doc.id,
-            ...doc.data()
-          });
+      const snapshot = await getDocs(creationsQuery);
+      
+      const userCreations = [];
+      snapshot.forEach(doc => {
+        userCreations.push({
+          id: doc.id,
+          ...doc.data()
         });
-        
-        console.log(`Loaded ${userCreations.length} creations after refresh`);
-        setCreations(userCreations);
-      } catch (collectionError) {
-        // If there's an error with the collection (might not exist yet),
-        // just set empty creations
-        console.log("MyCreationsList: Creations collection doesn't exist yet");
-        setCreations([]);
-      }
+      });
       
-      toast({
-        title: "Refreshed",
-        description: "Your creations have been refreshed",
-        variant: "default"
-      });
+      // Update both cache and state
+      cachedCreations = userCreations;
+      dataLoaded = true;
+      currentUserId = currentUser.uid;
+      
+      if (isMounted.current) {
+        setCreations(userCreations);
+        
+        toast({
+          title: "Refreshed",
+          description: "Your creations have been refreshed",
+          variant: "default"
+        });
+      }
     } catch (error) {
-      console.error('Error refreshing creations:', error);
-      toast({
-        title: "Error",
-        description: "Failed to refresh creations",
-        variant: "destructive"
-      });
+      console.error('MyCreationsList: Error refreshing creations:', error);
+      
+      if (isMounted.current) {
+        toast({
+          title: "Error",
+          description: "Failed to refresh creations",
+          variant: "destructive"
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setDataFetching(false);
+      }
     }
   };
   
@@ -318,12 +313,17 @@ const MyCreationsList = () => {
           </Tabs>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
-              <p className="mt-4 text-gray-500">Loading creations...</p>
+          {/* Background fetching indicator */}
+          {dataFetching && (
+            <div className="flex justify-end">
+              <div className="text-xs text-blue-500 flex items-center">
+                <Loader2 className="animate-spin h-3 w-3 mr-1" />
+                Fetching data...
+              </div>
             </div>
-          ) : filteredCreations.length === 0 ? (
+          )}
+          
+          {filteredCreations.length === 0 ? (
             <div className="text-center py-8">
               <Cloud className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">No Creations Found</h3>
@@ -344,8 +344,14 @@ const MyCreationsList = () => {
                   size="sm"
                   onClick={refreshCreations}
                   className="mt-2"
+                  disabled={dataFetching}
                 >
-                  Refresh Creations
+                  {dataFetching ? (
+                    <>
+                      <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                      Refreshing...
+                    </>
+                  ) : 'Refresh Creations'}
                 </Button>
               </div>
             </div>

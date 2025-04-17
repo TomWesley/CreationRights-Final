@@ -5,7 +5,9 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  browserLocalPersistence,
+  setPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -17,7 +19,8 @@ import {
   where, 
   getDocs, 
   updateDoc,
-  addDoc
+  addDoc,
+  
 } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -37,6 +40,14 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+setPersistence(auth, browserLocalPersistence)
+  .then(() => {
+    console.log('Firebase auth persistence set to LOCAL');
+  })
+  .catch((error) => {
+    console.error('Error setting auth persistence:', error);
+  });
 
 // Authentication functions
 export const loginWithEmail = async (email, password) => {

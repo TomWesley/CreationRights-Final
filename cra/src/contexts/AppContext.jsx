@@ -32,6 +32,8 @@ export const AppProvider = ({ children }) => {
   const [userType, setUserType] = useState('creator');
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dataLoaded, setDataLoaded] = useState({});
   
   // UI state
   const [activeView, setActiveView] = useState(() => {
@@ -69,21 +71,34 @@ export const AppProvider = ({ children }) => {
 
   // Listen for Firebase Auth state changes
   useEffect(() => {
+    console.log("Setting up auth state listener");
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      console.log("Auth state changed:", user ? `User: ${user.email}` : "No user");
+      
       if (user) {
         try {
-          // Load user profile data from Firestore
+          // Always set authenticated immediately when we have a user
+          setIsAuthenticated(true);
+          
+          // Set current user with basic info even before loading profile
+          setCurrentUser({
+            uid: user.uid,
+            email: user.email
+          });
+          
+          // Load user profile as a background operation
           const userProfile = await getUserProfile(user.uid);
           
           if (userProfile) {
-            // Set combined user object with auth and profile data
+            // Update with full profile data
             setCurrentUser({
               uid: user.uid,
               email: user.email,
               ...userProfile
             });
+            setUserType(userProfile.userType || 'creator');
           } else {
-            // User exists in auth but not in Firestore, create basic profile
+            // If no profile exists, create a minimal one but still keep user authenticated
             const newUserProfile = {
               uid: user.uid,
               email: user.email,
@@ -92,25 +107,32 @@ export const AppProvider = ({ children }) => {
               createdAt: new Date().toISOString()
             };
             
-            // Save to Firestore
-            await setDoc(doc(db, 'users', user.uid), newUserProfile);
+            // Save to Firestore in the background
+            setDoc(doc(db, 'users', user.uid), newUserProfile)
+              .catch(err => console.error('Error creating basic profile:', err));
             
             // Update state
             setCurrentUser(newUserProfile);
+            setUserType(newUserProfile.userType);
           }
         } catch (err) {
-          console.error('Error loading user profile:', err);
-          
+          console.error('Error in auth state handler:', err);
+          // Even with error, still consider user authenticated if Firebase says they are
+          setIsAuthenticated(true);
         }
       } else {
+        console.log("No authenticated user found");
         setCurrentUser(null);
+        setIsAuthenticated(false);
       }
       
+      // Always set loading to false when auth state is determined
       setIsLoading(false);
     });
     
     return () => unsubscribe();
   }, []);
+  
 
   // Save activeView to localStorage whenever it changes
   useEffect(() => {
@@ -121,82 +143,72 @@ export const AppProvider = ({ children }) => {
 
   // Load user data (folders and creations)
   // Load user data from Firestore
-const loadUserData = async (email) => {
-  try {
-    setIsLoading(true);
-    console.log(`Loading data for user: ${email}`);
-    
-    // Ensure we have a current authenticated user before accessing Firestore
-    if (!auth.currentUser || !auth.currentUser.uid) {
-      console.error('Cannot load user data: No authenticated user');
-      setIsLoading(false);
-      return;
+  const loadUserData = async (uid) => {
+    if (!uid) {
+      console.error('loadUserData: No UID provided');
+      return [];
     }
     
-    const userId = auth.currentUser.uid; // Use the UID from auth
-    console.log(`Using Firebase UID: ${userId} for loading data`);
+    console.log(`loadUserData: Loading data for user ${uid}`);
     
-    // Clear existing data
-    setCreations([]);
-    
-    // Load creations from Firestore
     try {
-      const creationsRef = collection(db, 'users', userId, 'creations');
-      const creationsQuery = query(creationsRef, orderBy('dateCreated', 'desc'));
-      const creationsSnapshot = await getDocs(creationsQuery);
+      // Simple approach - just get the creations
+      const userCreationsRef = collection(db, 'users', uid, 'creations');
+      const creationsSnapshot = await getDocs(userCreationsRef);
       
       const userCreations = [];
-      creationsSnapshot.forEach((doc) => {
+      creationsSnapshot.forEach(doc => {
         userCreations.push({
           id: doc.id,
           ...doc.data()
         });
       });
       
-      console.log(`Loaded ${userCreations.length} creations for user ${userId}`);
+      console.log(`loadUserData: Loaded ${userCreations.length} creations for user ${uid}`);
+      
+      // Set creations state
       setCreations(userCreations);
-    } catch (creationsError) {
-      console.error('Error loading creations:', creationsError);
-      console.error('Error details:', creationsError.code, creationsError.message);
+      
+      return userCreations;
+    } catch (error) {
+      console.error(`loadUserData: Error loading data for user ${uid}:`, error);
+      // Return empty array on error
+      return [];
     }
-    
-    // If no creations found in Firestore, use mock data as fallback during development
-    if (creations.length === 0) {
-      try {
-        const mockCreations = JSON.parse(localStorage.getItem('mockCreations')) || [];
-        if (mockCreations.length > 0) {
-          console.log('Using mock creations data:', mockCreations.length);
-          setCreations(mockCreations);
-        }
-      } catch (mockError) {
-        console.error('Error loading mock data:', mockError);
-      }
-    }
-  } catch (error) {
-    console.error('Error loading user data:', error);
-  } finally {
+  };
+
+
+  const forceAuthentication = () => {
+    console.log("Forcing authentication state to true");
+    setIsAuthenticated(true);
     setIsLoading(false);
-  }
-};
-
-
- 
+  };
   // Auth actions
   const handleLogin = async (e) => {
     e?.preventDefault();
     setIsLoading(true);
-    
+    setError(null);
     
     try {
+      console.log(`Attempting login for ${loginCredentials.email} as ${loginCredentials.accountType}`);
+      
       // Sign in with Firebase Auth
-      await signInWithEmailAndPassword(
+      const userCredential = await signInWithEmailAndPassword(
         auth, 
         loginCredentials.email,
         loginCredentials.password || 'demopassword123' // For demo, use default password if none provided
       );
       
+      console.log("Firebase login successful:", userCredential.user.uid);
+      
       // If successful, close the modal
       setShowLoginModal(false);
+      
+      // Update the userType in the state (will be overridden by profile when loaded)
+      setUserType(loginCredentials.accountType);
+      
+      // Ensure we set isAuthenticated immediately for better UX
+      setIsAuthenticated(true);
       
       // Clear form
       setLoginCredentials({
@@ -205,20 +217,25 @@ const loadUserData = async (email) => {
         accountType: 'creator'
       });
       
+      console.log("Login successful, awaiting profile data to load");
+      
       return true;
     } catch (err) {
       console.error('Login error:', err);
-      
+      setError(err.message);
       setIsLoading(false);
+      setIsAuthenticated(false);
       return false;
     }
   };
 
   const handleSignup = async (signupData) => {
     setIsLoading(true);
-    
+    setError(null);
     
     try {
+      console.log(`Attempting signup for ${signupData.email} as ${signupData.accountType}`);
+      
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -227,6 +244,7 @@ const loadUserData = async (email) => {
       );
       
       const user = userCredential.user;
+      console.log("Firebase signup successful:", user.uid);
       
       // Create user profile in Firestore
       const userProfile = {
@@ -243,6 +261,7 @@ const loadUserData = async (email) => {
       
       // Save to Firestore
       await setDoc(doc(db, 'users', user.uid), userProfile);
+      console.log("User profile created in Firestore");
       
       // Set current user
       setCurrentUser({
@@ -250,14 +269,21 @@ const loadUserData = async (email) => {
         uid: user.uid
       });
       
+      // Update UI state
+      setIsAuthenticated(true);
+      setUserType(userProfile.userType);
+      
       // Close the register flow modal
       setShowRegisterFlow(false);
       
-      setIsLoading(false);
+      console.log("Registration successful, user is authenticated");
+      
       return true;
     } catch (err) {
       console.error('Signup error:', err);
+      setError(err.message);
       setIsLoading(false);
+      setIsAuthenticated(false);
       return false;
     }
   };
@@ -269,8 +295,13 @@ const loadUserData = async (email) => {
     try {
       await signOut(auth);
       setCurrentUser(null);
+      setIsAuthenticated(false);
+      // Clear data loaded cache on logout
+      setDataLoaded({});
+      console.log("User logged out successfully, data cache cleared");
     } catch (err) {
       console.error('Logout error:', err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
@@ -290,6 +321,11 @@ const loadUserData = async (email) => {
         ...prev,
         ...profileData
       }));
+      
+      // Update userType if changed
+      if (profileData.userType && profileData.userType !== userType) {
+        setUserType(profileData.userType);
+      }
       
       return true;
     } catch (err) {
@@ -479,6 +515,25 @@ const loadUserData = async (email) => {
     setCurrentCreation(creation);
     setEditMode(true);
     setActiveView('editCreation');
+  };
+  const navigateTo = (view) => {
+    console.log(`Navigating to: ${view}`);
+    
+    // Special handling for problematic routes
+    const problematicRoutes = ['myCreations', 'allCreations', 'creators'];
+    
+    if (problematicRoutes.includes(view)) {
+      console.log(`Navigating to potentially problematic route: ${view}`);
+      
+      // Set the view immediately to prevent race conditions
+      setActiveView(view);
+      
+      // No additional redirects or checks for these routes
+      return;
+    }
+    
+    // For other routes, just set active view normally
+    setActiveView(view);
   };
 
   const handleDelete = async (id) => {

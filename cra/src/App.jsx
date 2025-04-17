@@ -1,5 +1,5 @@
-// src/App.jsx - Updated to include Toast Provider
-import MyCreationsList from './components/pages/MyCreationsList';
+// src/App.jsx - Simplified with minimal route checks
+
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
 import LandingPage from './components/pages/LandingPage';
@@ -8,24 +8,22 @@ import AppSidebar from './components/layout/AppSidebar';
 import CreatorDashboard from './components/pages/CreatorDashboard';
 import AgencyDashboard from './components/pages/AgencyDashboard';
 import AllCreationsList from './components/pages/AllCreationsList';
+import MyCreationsList from './components/pages/MyCreationsList';
 import ArtistsList from './components/pages/ArtistsList';
 import CreatorManagement from './components/pages/CreatorManagement';
 import Settings from './components/pages/Settings';
 import NewFolderModal from './components/shared/NewFolderModal';
 import LoadingIndicator from './components/shared/LoadingIndicator';
-
-import UploadCreation from './components/pages/UploadCreation'; // Import the new component
-
+import UploadCreation from './components/pages/UploadCreation';
 import TeamPage from './components/pages/TeamPage';
 import NetworkPage from './components/pages/NetworkPage';
 import SocialMediaPage from './components/pages/SocialMediaPage';
-import './CreationRightsApp.css';
 import LicensesPage from './components/pages/LicensesPage';
-
 import ChatPage from './components/pages/ChatPage';
 import Footer from './components/layout/Footer';
 import { ToastProvider } from './components/ui/use-toast';
 import { Toaster } from './components/ui/toaster';
+import './CreationRightsApp.css';
 
 const AppContent = () => {
   const { 
@@ -36,18 +34,21 @@ const AppContent = () => {
     isLoading
   } = useAppContext();
   
-  // If not authenticated, show landing page
-  if (!isAuthenticated) {
-    return (
-      <>
-        <LandingPage />
-        {isLoading && <LoadingIndicator />}
-      </>
-    );
+  // If loading, just show a loading indicator
+  if (isLoading) {
+    return <LoadingIndicator fullScreen={true} message="Loading..." />;
   }
   
-  // Render the appropriate view based on activeView state
+  // If not authenticated, show landing page
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+  
+  // Simple content rendering without route protection
   const renderContent = () => {
+    // Debug - log current view being rendered
+    console.log(`Rendering view: ${activeView} for ${userType}`);
+    
     switch (activeView) {
       case 'dashboard':
         return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
@@ -57,7 +58,7 @@ const AppContent = () => {
         return <MyCreationsList />;
       
       case 'uploadCreation':
-        return <UploadCreation />; // Add the new route
+        return <UploadCreation />;
       
       // Social Media page - available for all user types
       case 'socialMedia':
@@ -70,14 +71,17 @@ const AppContent = () => {
       // Agency-specific views
       case 'allCreations':
         return <AllCreationsList />;
+      
       case 'creators':
         return userType === 'agency' ? <ArtistsList /> : <CreatorManagement />;
       
       // Common views
       case 'team':
         return <TeamPage />;
+      
       case 'network':
         return <NetworkPage />;
+      
       case 'settings':
         return <Settings />;
   
@@ -104,7 +108,6 @@ const AppContent = () => {
       </div>
       
       {showNewFolderModal && <NewFolderModal />}
-      {isLoading && <LoadingIndicator />}
       <Footer />
       <Toaster />
     </div>

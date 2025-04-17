@@ -1,6 +1,7 @@
 // src/components/auth/EnhancedLoginModal.jsx
 
-import React from 'react';
+import React, { createContext, useState, useEffect, useContext } from 'react';
+
 import { X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -22,7 +23,25 @@ const LoginModal = () => {
     handleLogin, 
     isLoading 
   } = useAppContext();
+  const [loginError, setLoginError] = useState(null);
   
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError(null);
+    
+    try {
+      console.log('Attempting login with:', loginCredentials);
+      const success = await handleLogin(e);
+      
+      if (!success) {
+        console.log('Login returned unsuccessful');
+        setLoginError("Login failed. Please check your credentials and try again.");
+      }
+    } catch (error) {
+      console.error('Login error caught in modal:', error);
+      setLoginError(error.message || "An error occurred during login.");
+    }
+  };
   // Handle social login
   const handleSocialLogin = (provider) => {
     console.log(`Login with ${provider}`);
@@ -58,7 +77,7 @@ const LoginModal = () => {
         <div className="p-6">
           <h2 className="text-xl font-bold text-center mb-6">Sign in to your account</h2>
           
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <Label htmlFor="email">Email</Label>
               <Input

@@ -1,6 +1,6 @@
-// src/components/pages/MyCreationsList.jsx
+// src/components/pages/MyCreationsList.jsx - No Firestore listeners
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Cloud } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -9,6 +9,16 @@ import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import CreationCard from '../shared/CreationCard';
 import { useAppContext } from '../../contexts/AppContext';
 import { useToast } from '../ui/use-toast';
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  orderBy, 
+  getDoc,
+  doc,
+  limit
+} from 'firebase/firestore';
+import { db } from '../../services/firebase';
 
 const MyCreationsList = () => {
   const { 
@@ -18,49 +28,116 @@ const MyCreationsList = () => {
     setIsLoading,
     currentUser,
     setActiveView,
-    creations,
     handleDelete,
-    handleUpdateCreation,
-    loadUserData
+    handleUpdateCreation
   } = useAppContext();
   
   const { toast } = useToast();
   
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
+  const [creations, setCreations] = useState([]);
   const [filteredCreations, setFilteredCreations] = useState([]);
+  const [loadAttempted, setLoadAttempted] = useState(false);
   
-  // Load data on component mount
+  // Track if component is mounted
+  const isMounted = useRef(true);
+  
+  // Cleanup on unmount
   useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      console.log("MyCreationsList unmounted");
+    };
+  }, []);
+  
+  // Load data directly from Firebase - ONE TIME ONLY
+  useEffect(() => {
+    // Skip if we've already attempted to load
+    if (loadAttempted) {
+      console.log("MyCreationsList: Already attempted to load data, skipping");
+      return;
+    }
+    
+    // Skip loading if we don't have a user yet
+    if (!currentUser || !currentUser.uid) {
+      console.log("MyCreationsList: No user available yet");
+      return;
+    }
+    
     const loadCreations = async () => {
+      console.log("MyCreationsList: Starting to load data");
       setIsLoading(true);
       
       try {
-        if (currentUser && currentUser.uid) {
-          await loadUserData(currentUser.uid);
-        } else {
-          console.error('Cannot load creations: No authenticated user');
-          toast({
-            title: "Authentication required",
-            description: "Please log in to view your creations",
-            variant: "destructive"
+        console.log(`MyCreationsList: Loading creations for user ${currentUser.uid}`);
+        
+        // Mark that we've attempted to load
+        setLoadAttempted(true);
+        
+        // First, check if user document exists
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDocSnapshot = await getDoc(userDocRef);
+        
+        if (!userDocSnapshot.exists()) {
+          console.log(`MyCreationsList: User document doesn't exist for ${currentUser.uid}`);
+          if (isMounted.current) {
+            setCreations([]);
+            setIsLoading(false);
+          }
+          return;
+        }
+        
+        // Now try to get creations - but don't fail if collection doesn't exist
+        try {
+          // Fetch creations directly from Firebase - WITH LIMIT
+          const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
+          const creationsQuery = query(
+            creationsRef, 
+            orderBy('dateCreated', 'desc'),
+            limit(50) // Limit to 50 items to avoid loading too much
+          );
+          
+          const snapshot = await getDocs(creationsQuery);
+          
+          const userCreations = [];
+          snapshot.forEach(doc => {
+            userCreations.push({
+              id: doc.id,
+              ...doc.data()
+            });
           });
+          
+          console.log(`MyCreationsList: Loaded ${userCreations.length} creations`);
+          
+          if (isMounted.current) {
+            setCreations(userCreations);
+          }
+        } catch (collectionError) {
+          // If there's an error with the collection (might not exist yet),
+          // just set empty creations
+          console.log("MyCreationsList: Creations collection doesn't exist or couldn't be accessed");
+          console.error(collectionError);
+          
+          if (isMounted.current) {
+            setCreations([]);
+          }
         }
       } catch (error) {
-        console.error('Error loading creations:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load your creations",
-          variant: "destructive"
-        });
+        console.error('MyCreationsList: Error loading creations:', error);
+        // Initialize with empty array on error
+        if (isMounted.current) {
+          setCreations([]);
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted.current) {
+          setIsLoading(false);
+        }
       }
     };
     
     loadCreations();
-    // Empty dependency array to run only once on mount
-  }, []);
+  }, [currentUser, setIsLoading, loadAttempted]);
   
   // Filter creations based on tab and search query
   useEffect(() => {
@@ -137,20 +214,51 @@ const MyCreationsList = () => {
     setActiveView('uploadCreation');
   };
   
-  // Refresh creations data
+  // Refresh creations data - with forced reload
   const refreshCreations = async () => {
+    if (!currentUser || !currentUser.uid) {
+      console.log("Cannot refresh: No user available");
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      if (currentUser && currentUser.uid) {
-        await loadUserData(currentUser.uid);
+      console.log(`Refreshing creations for user ${currentUser.uid}`);
+      
+      try {
+        // Fetch creations directly from Firebase
+        const creationsRef = collection(db, 'users', currentUser.uid, 'creations');
+        const creationsQuery = query(
+          creationsRef, 
+          orderBy('dateCreated', 'desc'),
+          limit(50) // Limit to 50 items
+        );
         
-        toast({
-          title: "Refreshed",
-          description: "Your creations have been refreshed",
-          variant: "default"
+        const snapshot = await getDocs(creationsQuery);
+        
+        const userCreations = [];
+        snapshot.forEach(doc => {
+          userCreations.push({
+            id: doc.id,
+            ...doc.data()
+          });
         });
+        
+        console.log(`Loaded ${userCreations.length} creations after refresh`);
+        setCreations(userCreations);
+      } catch (collectionError) {
+        // If there's an error with the collection (might not exist yet),
+        // just set empty creations
+        console.log("MyCreationsList: Creations collection doesn't exist yet");
+        setCreations([]);
       }
+      
+      toast({
+        title: "Refreshed",
+        description: "Your creations have been refreshed",
+        variant: "default"
+      });
     } catch (error) {
       console.error('Error refreshing creations:', error);
       toast({

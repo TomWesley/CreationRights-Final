@@ -1,7 +1,7 @@
-// src/components/auth/RegisterFlow.jsx
+// src/components/auth/RegisterFlow.jsx - Updated with improved error handling
 
 import React, { useState } from 'react';
-import { X, ArrowRight, ArrowLeft, Mail, User, Check } from 'lucide-react';
+import { X, ArrowRight, ArrowLeft, Mail, User, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -21,11 +21,15 @@ const RegisterFlow = () => {
     showRegisterFlow, 
     setShowRegisterFlow, 
     handleSignup, 
-    isLoading 
+    isLoading,
+    error: contextError 
   } = useAppContext();
   
   // Steps: 1 = email, 2 = username, 3 = social media
   const [step, setStep] = useState(1);
+  
+  // Local state for form submission
+  const [submitting, setSubmitting] = useState(false);
   
   // Registration data
   const [registerData, setRegisterData] = useState({
@@ -138,6 +142,11 @@ const RegisterFlow = () => {
   // Handle final form submission
   const handleSubmit = async () => {
     try {
+      // Show local loading state
+      setSubmitting(true);
+      // Clear any previous errors
+      setErrors({});
+      
       // Prepare complete signup data
       const signupData = {
         email: registerData.email,
@@ -152,15 +161,25 @@ const RegisterFlow = () => {
         }
       };
       
+      console.log('Submitting registration data');
+      
       // Call the signup handler from context
       const success = await handleSignup(signupData);
       
       if (success) {
-        // Registration successful, modal will be closed by the handler
         console.log('Registration successful!');
+        // The modal will be closed by the handler
+      } else {
+        // If handleSignup returned false but didn't throw an error
+        setSubmitting(false);
+        setErrors({
+          ...errors,
+          general: "Registration failed. Please try again."
+        });
       }
     } catch (error) {
       console.error('Registration error:', error);
+      setSubmitting(false);
       setErrors({
         ...errors,
         general: error.message
@@ -177,12 +196,15 @@ const RegisterFlow = () => {
     return null;
   }
   
+  // Determine if we should show loading
+  const isSubmitting = isLoading || submitting;
+  
   return (
     <div className="modal-overlay">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg overflow-hidden">
         {/* Header */}
         <div className="relative p-6 border-b flex justify-center items-center">
-          <img src="/images/crlogo.svg" alt="Creation Rights Logo" className="h-8 w-auto" />
+          <img src="/crlogo.svg" alt="Creation Rights Logo" className="h-8 w-auto" />
           
           <button 
             onClick={() => setShowRegisterFlow(false)}
@@ -222,6 +244,17 @@ const RegisterFlow = () => {
           </div>
         </div>
         
+        {/* Error display */}
+        {(contextError || errors.general) && (
+          <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-600 flex items-start">
+            <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Registration Error</p>
+              <p className="text-sm">{contextError || errors.general}</p>
+            </div>
+          </div>
+        )}
+        
         {/* Form steps */}
         <div className="p-6">
           {step === 1 && (
@@ -259,6 +292,7 @@ const RegisterFlow = () => {
               <Button 
                 onClick={goToNextStep} 
                 className="w-full mb-6"
+                disabled={isSubmitting}
               >
                 Continue <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -273,6 +307,7 @@ const RegisterFlow = () => {
                   variant="outline" 
                   className="flex justify-center items-center"
                   onClick={() => handleSocialSignup('google')}
+                  disabled={isSubmitting}
                 >
                   <GoogleIcon className="h-5 w-5" />
                 </Button>
@@ -281,6 +316,7 @@ const RegisterFlow = () => {
                   variant="outline" 
                   className="flex justify-center items-center"
                   onClick={() => handleSocialSignup('facebook')}
+                  disabled={isSubmitting}
                 >
                   <FacebookIcon className="h-5 w-5" />
                 </Button>
@@ -289,6 +325,7 @@ const RegisterFlow = () => {
                   variant="outline" 
                   className="flex justify-center items-center"
                   onClick={() => handleSocialSignup('apple')}
+                  disabled={isSubmitting}
                 >
                   <AppleIcon className="h-5 w-5" />
                 </Button>
@@ -351,6 +388,7 @@ const RegisterFlow = () => {
                   variant="outline" 
                   onClick={goToPreviousStep}
                   className="flex-1"
+                  disabled={isSubmitting}
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
@@ -358,6 +396,7 @@ const RegisterFlow = () => {
                 <Button 
                   onClick={goToNextStep}
                   className="flex-1"
+                  disabled={isSubmitting}
                 >
                   Continue <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -439,6 +478,7 @@ const RegisterFlow = () => {
                   variant="outline" 
                   onClick={goToPreviousStep}
                   className="flex-1"
+                  disabled={isSubmitting}
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
@@ -446,9 +486,14 @@ const RegisterFlow = () => {
                 <Button 
                   onClick={handleSubmit}
                   className="flex-1"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 >
-                  {isLoading ? 'Creating Account...' : 'Complete Setup'}
+                  {isSubmitting ? (
+                    <span className="flex items-center justify-center">
+                      <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                      Creating...
+                    </span>
+                  ) : 'Complete Setup'}
                 </Button>
               </div>
               
@@ -456,7 +501,7 @@ const RegisterFlow = () => {
                 <button 
                   onClick={handleSkipAndComplete}
                   className="text-sm text-blue-600 hover:underline"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 >
                   Skip this step
                 </button>

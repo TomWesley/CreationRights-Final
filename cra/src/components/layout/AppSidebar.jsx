@@ -6,6 +6,7 @@ import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Inst
 import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
 import { getUnreadMessagesCount } from '../../services/firestoreChat';
+import ProfilePhoto from '../shared/ProfilePhoto';
 
 const AppSidebar = () => {
   const { 
@@ -19,7 +20,17 @@ const AppSidebar = () => {
   
   const isAgency = userType === 'agency';
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-
+  
+  const formatDisplayName = (email) => {
+    if (!email) return 'User';
+    
+    // If it's a simple username without domain, just return it
+    if (!email.includes('@')) return email;
+    
+    // Otherwise, get the part before @ and capitalize first letter
+    const name = email.split('@')[0];
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  };
   // Fetch unread message count
   useEffect(() => {
     const fetchUnreadCount = async () => {
@@ -159,6 +170,30 @@ const AppSidebar = () => {
               </button>
             </div>
           </nav>
+          <div className="sidebar-profile flex items-center cursor-pointer" onClick={() => setActiveView('settings')}>
+            <div className="mr-2">
+              <ProfilePhoto 
+                email={currentUser?.email}
+                name={currentUser?.name || formatDisplayName(currentUser?.email)}
+                photoUrl={currentUser?.photoUrl} // Pass the photoUrl from Firestore
+                userId={currentUser?.uid} // Pass the userId for proxy URL construction
+                size="sm"
+                clickable
+              />
+            </div>
+            
+            <div>
+              <span className="flex items-center">
+                <span className="user-name">{currentUser?.name || formatDisplayName(currentUser?.email)}</span>
+              </span>
+              <span className="user-email text-xs text-gray-400 block">
+                {currentUser?.email}
+              </span>
+            </div>
+            <span className="user-type ml-2">
+              {userType === 'creator' ? 'Creator' : 'Agency'}
+            </span>
+          </div>
         </div>
       </aside>
       

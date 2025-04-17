@@ -24,7 +24,8 @@
     min-height: 100vh;
     background-color: var(--bg-app);
   }
-  
+   
+
   /* Landing Page */
   .landing-container {
     display: flex;
@@ -555,6 +556,13 @@
   .app-content {
     display: flex;
     flex: 1;
+  }
+  .sidebar-profile{
+    position: fixed;
+    bottom: 3vh;
+    padding: 4px;
+    border: solid;
+    border-color: white;
   }
   
   .app-sidebar {
@@ -1206,87 +1214,6 @@
     align-self: flex-start;
   }
   
-  /* Folder Structure in Sidebar */
-  .folder-list {
-    list-style: none;
-    padding-left: 0;
-  }
-  
-  .depth-0 {
-    padding-left: 0;
-  }
-  
-  .folder-item {
-    margin: 0.25rem 0;
-  }
-  
-  .folder-row {
-    display: flex;
-    align-items: center;
-    padding: 0.25rem 0.5rem;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-  }
-  
-  .folder-row:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-  
-  .folder-active {
-    background-color: rgba(59, 130, 246, 0.2);
-    color: #3b82f6;
-  }
-  
-  .folder-toggle {
-    background: none;
-    border: none;
-    color: #9ca3af;
-    cursor: pointer;
-    margin-right: 0.25rem;
-    padding: 0;
-  }
-  
-  .folder-toggle:hover {
-    color: white;
-  }
-  
-  .folder-toggle-placeholder {
-    margin-left: 1.25rem;
-    margin-right: 0.25rem;
-  }
-  
-  .folder-icon {
-    height: 1rem;
-    width: 1rem;
-    margin-right: 0.5rem;
-    color: #3b82f6;
-  }
-  
-  .folder-icon-small {
-    height: 1rem;
-    width: 1rem;
-  }
-  
-  .folder-name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  
-  .folder-delete {
-    background: none;
-    border: none;
-    color: #9ca3af;
-    cursor: pointer;
-    margin-left: 0.5rem;
-    padding: 0;
-  }
-  
-  .folder-delete:hover {
-    color: var(--destructive-color);
-  }
-
   /* Add these styles to your CreationRightsApp.css file */
 
 /* Authentication Flow Styles */

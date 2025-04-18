@@ -1,4 +1,4 @@
-// src/components/layout/AppSidebar.jsx - Updated to handle My Creations
+// src/components/layout/AppSidebar.jsx - Updated for fixed position and full height
 
 import React, { useState, useEffect } from 'react';
 import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram, DollarSign } from 'lucide-react';
@@ -7,6 +7,8 @@ import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
 import { getUnreadMessagesCount } from '../../services/firestoreChat';
 import ProfilePhoto from '../shared/ProfilePhoto';
+import { Button } from '../ui/button';
+import { LogOut } from 'lucide-react';
 
 const AppSidebar = () => {
   const { 
@@ -15,7 +17,8 @@ const AppSidebar = () => {
     setIsMobileMenuOpen,
     activeView,
     setActiveView,
-    currentUser
+    currentUser,
+    handleLogout
   } = useAppContext();
   
   const isAgency = userType === 'agency';
@@ -31,6 +34,7 @@ const AppSidebar = () => {
     const name = email.split('@')[0];
     return name.charAt(0).toUpperCase() + name.slice(1);
   };
+  
   // Fetch unread message count
   useEffect(() => {
     const fetchUnreadCount = async () => {
@@ -56,7 +60,9 @@ const AppSidebar = () => {
   return (
     <>
       <aside className={`app-sidebar ${isMobileMenuOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+      {/* <img src="/images/watermark.png" alt="Creation Rights Logo" className="sb-logo" /> */}
         <div className="sidebar-content">
+        <img src="/images/watermark.png" alt="Creation Rights Logo" className="sb-logo" />
           <nav className="sidebar-nav">
             <div>
               <button
@@ -75,7 +81,6 @@ const AppSidebar = () => {
               <button
                 className={`nav-item ${activeView === 'myCreations' || activeView === 'allCreations' ? 'nav-active' : ''}`}
                 onClick={() => {
-                
                   setActiveView(isAgency ? 'allCreations' : 'myCreations');
                   setIsMobileMenuOpen(false);
                 }}
@@ -83,8 +88,6 @@ const AppSidebar = () => {
                 <FileText className="nav-icon" />
                 {isAgency ? 'Creations' : 'My Creations'}
               </button>
-              
-              
             </div>
             
             {/* Social Media Nav Item */}
@@ -170,13 +173,15 @@ const AppSidebar = () => {
               </button>
             </div>
           </nav>
+          
+          {/* User profile section - now positioned at bottom of sidebar */}
           <div className="sidebar-profile flex items-center cursor-pointer" onClick={() => setActiveView('settings')}>
             <div className="mr-2">
               <ProfilePhoto 
                 email={currentUser?.email}
                 name={currentUser?.name || formatDisplayName(currentUser?.email)}
-                photoUrl={currentUser?.photoUrl} // Pass the photoUrl from Firestore
-                userId={currentUser?.uid} // Pass the userId for proxy URL construction
+                photoUrl={currentUser?.photoUrl}
+                userId={currentUser?.uid}
                 size="sm"
                 clickable
               />
@@ -185,15 +190,21 @@ const AppSidebar = () => {
             <div>
               <span className="flex items-center">
                 <span className="user-name">{currentUser?.name || formatDisplayName(currentUser?.email)}</span>
+                <span className="user-type ml-2">
+              {userType === 'creator' ? 'Creator' : 'Agency'}
+            </span>
               </span>
+              
               <span className="user-email text-xs text-gray-400 block">
                 {currentUser?.email}
               </span>
             </div>
-            <span className="user-type ml-2">
-              {userType === 'creator' ? 'Creator' : 'Agency'}
-            </span>
+            
           </div>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="logout-button">
+            <LogOut className="logout-icon" />
+            <span className="logout-text">Sign Out</span>
+          </Button>
         </div>
       </aside>
       

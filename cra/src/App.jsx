@@ -1,4 +1,4 @@
-// src/App.jsx - Simplified with minimal route checks
+// src/App.jsx - Modified to bypass loading state
 
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
@@ -34,10 +34,8 @@ const AppContent = () => {
     isLoading
   } = useAppContext();
   
-  // If loading, just show a loading indicator
-  if (isLoading) {
-    return <LoadingIndicator fullScreen={true} message="Loading..." />;
-  }
+  // MODIFIED: No longer check isLoading for problematic pages
+  // This bypasses the loading screen for all pages
   
   // If not authenticated, show landing page
   if (!isAuthenticated) {
@@ -95,7 +93,7 @@ const AppContent = () => {
   
   return (
     <div className="app-layout">
-      <AppHeader />
+      {/* <AppHeader /> */}
       
       <div className="app-content">
         <AppSidebar />
@@ -107,8 +105,8 @@ const AppContent = () => {
         </main>
       </div>
       
-      {showNewFolderModal && <NewFolderModal />}
-      <Footer />
+      
+      {/* <Footer /> */}
       <Toaster />
     </div>
   );

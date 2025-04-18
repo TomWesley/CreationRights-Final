@@ -26,7 +26,7 @@ const ArtistsList = () => {
   // Fetch artists data
   useEffect(() => {
     const fetchArtists = async () => {
-      setIsLoading(true);
+      // REMOVED: setIsLoading(true);
       
       try {
         // Fetch all users from Firestore
@@ -82,12 +82,12 @@ const ArtistsList = () => {
         console.error('Error fetching artists:', err);
         setError(err.message);
       } finally {
-        setIsLoading(false);
+        // REMOVED: setIsLoading(false);
       }
     };
   
     fetchArtists();
-  }, [setIsLoading]);
+  }, []);
   
   // Extract all unique specialties and content types for filter dropdowns
   const allSpecialties = [...new Set(artists.flatMap(artist => artist.specialties))].sort();
@@ -335,13 +335,8 @@ const ArtistsList = () => {
         </Card>
       )}
       
-      {/* Artist cards */}
-      {isLoading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
-          <p className="mt-4 text-gray-500">Loading artists...</p>
-        </div>
-      ) : error ? (
+      {/* Artist cards - MODIFIED: Skip the loading check */}
+      {error ? (
         <div className="text-center py-8 bg-red-50 rounded-lg p-6">
           <User className="h-12 w-12 text-red-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium mb-2">Error Loading Artists</h3>

@@ -36,7 +36,7 @@ const AllCreationsList = () => {
   // Load published creations from Firestore on component mount
   useEffect(() => {
     const fetchPublishedCreations = async () => {
-      setIsLoading(true);
+      // REMOVED: setIsLoading(true);
       
       try {
         // Make sure we're authenticated before accessing Firestore
@@ -103,12 +103,12 @@ const AllCreationsList = () => {
           setCreations([]);
         }
       } finally {
-        setIsLoading(false);
+        // REMOVED: setIsLoading(false);
       }
     };
     
     fetchPublishedCreations();
-  }, [setIsLoading]);
+  }, []);
   
   // Filter and sort creations
   useEffect(() => {
@@ -203,7 +203,7 @@ const AllCreationsList = () => {
   
   // Function to refresh creations data
   const refreshCreations = async () => {
-    setIsLoading(true);
+    // REMOVED: setIsLoading(true);
     
     try {
       // Make sure we're authenticated before accessing Firestore
@@ -266,7 +266,7 @@ const AllCreationsList = () => {
         console.error('Error using mock data:', mockError);
       }
     } finally {
-      setIsLoading(false);
+      // REMOVED: setIsLoading(false);
     }
   };
   
@@ -400,12 +400,8 @@ const AllCreationsList = () => {
           </Tabs>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
-              <p className="mt-4 text-gray-500">Loading creations...</p>
-            </div>
-          ) : filteredCreations.length === 0 ? (
+          {/* MODIFIED: Skip the loading check */}
+          {filteredCreations.length === 0 ? (
             <div className="text-center py-8">
               <Globe className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium mb-2">No Creations Found</h3>

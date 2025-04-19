@@ -101,7 +101,7 @@ const AppSidebar = () => {
                 }}
               >
                 <FileText className="nav-icon" />
-                {isAgency ? 'Creations' : 'My Creations'}
+                {isAgency ? 'Creations' : 'Library'}
               </button>
             </div>
             
@@ -115,7 +115,7 @@ const AppSidebar = () => {
                 }}
               >
                 <Instagram className="nav-icon" />
-                Social Media
+                Audience
               </button>
             </div>
             <div>
@@ -127,7 +127,7 @@ const AppSidebar = () => {
                 }}
               >
                 <DollarSign className="nav-icon" />
-                {userType === 'creator' ? 'Licenses Sold' : 'Licenses'}
+                {userType === 'creator' ? 'Billing' : 'Licenses'}
               </button>
             </div>
             <div>

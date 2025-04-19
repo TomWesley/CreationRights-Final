@@ -271,7 +271,7 @@ const MyCreationsList = () => {
       <div className="creations-header">
         <div>
           <h1 className="creations-title">
-            My Creations
+            Library
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage and organize all your creative works

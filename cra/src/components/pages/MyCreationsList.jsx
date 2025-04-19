@@ -1,12 +1,12 @@
-// src/components/pages/MyCreationsList.jsx - Fixed re-rendering issues
+// src/components/pages/MyCreationsList.jsx - Enhanced with better cards and edit functionality
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Cloud, Loader2 } from 'lucide-react';
+import { Search, Plus, Cloud, Loader2, RefreshCw } from 'lucide-react';
 import { Card, CardHeader, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
-import CreationCard from '../shared/CreationCard';
+import EnhancedCreationCard from '../shared/EnhancedCreationCard';
 import { useAppContext } from '../../contexts/AppContext';
 import { useToast } from '../ui/use-toast';
 import { 
@@ -33,7 +33,8 @@ const MyCreationsList = () => {
     currentUser,
     setActiveView,
     handleDelete,
-    handleUpdateCreation
+    handleUpdateCreation,
+    handleEdit
   } = useAppContext();
   
   const { toast } = useToast();
@@ -182,6 +183,11 @@ const MyCreationsList = () => {
   
   // Handle delete creation
   const handleDeleteCreation = (id) => {
+    // Confirm deletion
+    if (!window.confirm('Are you sure you want to delete this creation?')) {
+      return;
+    }
+    
     handleDelete(id);
     
     toast({
@@ -193,10 +199,12 @@ const MyCreationsList = () => {
   
   // Handle edit creation
   const handleEditCreation = (creation) => {
-    // For now, display a toast until edit functionality is implemented
+    // Call the handleEdit function from AppContext
+    handleEdit(creation);
+    
     toast({
-      title: "Edit not available",
-      description: "Edit functionality will be implemented soon",
+      title: "Editing creation",
+      description: "You can now edit the creation details",
       variant: "default"
     });
   };
@@ -268,9 +276,9 @@ const MyCreationsList = () => {
   
   return (
     <div className="creations-view">
-      <div className="creations-header">
+      <div className="creations-header flex justify-between items-start mb-6">
         <div>
-          <h1 className="creations-title">
+          <h1 className="text-2xl font-bold">
             Library
           </h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -278,12 +286,12 @@ const MyCreationsList = () => {
           </p>
         </div>
         
-        <div className="creations-actions flex space-x-2">
-          <div className="search-container">
-            <Search className="search-icon" />
+        <div className="creations-actions flex gap-2 items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search creations..."
-              className="search-input"
+              className="pl-9 w-64"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -291,16 +299,16 @@ const MyCreationsList = () => {
           
           <Button 
             variant="default" 
-            className="upload-button"
             onClick={navigateToUpload}
+            className="whitespace-nowrap"
           >
-            <Plus className="button-icon-small mr-1" /> Upload Creation
+            <Plus className="h-4 w-4 mr-1" /> Upload Creation
           </Button>
         </div>
       </div>
       
       <Card>
-        <CardHeader className="tabs-header">
+        <CardHeader className="pb-2">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -311,18 +319,18 @@ const MyCreationsList = () => {
               <TabsTrigger value="software">Software</TabsTrigger>
             </TabsList>
           </Tabs>
-        </CardHeader>
-        <CardContent>
-          {/* Background fetching indicator */}
+          
           {dataFetching && (
-            <div className="flex justify-end">
+            <div className="flex justify-end mt-2">
               <div className="text-xs text-blue-500 flex items-center">
                 <Loader2 className="animate-spin h-3 w-3 mr-1" />
                 Fetching data...
               </div>
             </div>
           )}
-          
+        </CardHeader>
+        
+        <CardContent>
           {filteredCreations.length === 0 ? (
             <div className="text-center py-8">
               <Cloud className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -351,14 +359,19 @@ const MyCreationsList = () => {
                       <Loader2 className="animate-spin h-4 w-4 mr-2" />
                       Refreshing...
                     </>
-                  ) : 'Refresh Creations'}
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh Creations
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
           ) : (
-            <div className="creation-list">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-2">
               {filteredCreations.map(creation => (
-                <CreationCard 
+                <EnhancedCreationCard 
                   key={creation.id} 
                   creation={creation} 
                   handleEdit={() => handleEditCreation(creation)}

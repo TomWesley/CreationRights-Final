@@ -23,6 +23,7 @@ import ChatPage from './components/pages/ChatPage';
 import Footer from './components/layout/Footer';
 import { ToastProvider } from './components/ui/use-toast';
 import { Toaster } from './components/ui/toaster';
+import EditCreation from './components/pages/EditCreation';
 import './CreationRightsApp.css';
 
 const AppContent = () => {
@@ -57,6 +58,9 @@ const AppContent = () => {
       
       case 'uploadCreation':
         return <UploadCreation />;
+
+      case 'editCreation':
+        return <EditCreation />;
       
       // Social Media page - available for all user types
       case 'socialMedia':

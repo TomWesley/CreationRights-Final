@@ -563,16 +563,18 @@
     right: 1rem;
     padding: 0.75rem;
     font-size: small;
-    border: 1px solid rgb(0, 0, 0);
-    border-radius: var(--radius-md);
+    border: solid;
+    border-radius: .75rem;
+    border-color: #afafaf;
     background-color: rgba(255, 255, 255, 0.05);
   }
 
-  .sb-logo{
+  .sb-logo {
     max-width: 10vh;
     min-width: 60px;
-    padding-bottom: 5vh;
+    padding-bottom: 2vh;
     margin-left: 2vh;
+    margin-bottom: 1rem;
   }
   
   .app-sidebar {
@@ -1188,6 +1190,32 @@
     gap: 1rem;
   }
   
+  .add-creation-button {
+    margin-bottom: 1.5rem;
+    width: 70%;
+    background-color: white;
+    color: black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+    border: solid;
+    border-radius: .75rem;
+    border-color: #afafaf;
+  }
+  
+  .add-creation-button:hover {
+    background-color: #c9c9c982;
+  }
+  
+  .add-icon {
+    margin-right: 0.5rem;
+    height: 1rem;
+    width: 1rem;
+    color: #5b5b5b;
+  }
+
   .add-creator-button,
   .view-creators-button {
     display: flex;
@@ -1483,3 +1511,135 @@
     width: 1rem;
     margin-right: 0.5rem;
   }
+
+  /* Profile Header */
+.creator-my-page {
+  margin-bottom: 2rem;
+}
+
+.profile-header {
+  position: relative;
+  transition: box-shadow 0.3s ease;
+}
+
+.profile-header:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.profile-photo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-photo-container img {
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid white;
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-info {
+  max-width: 70%;
+}
+
+/* Social Media Icons */
+.social-links {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.social-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.social-icon:hover {
+  transform: translateY(-2px);
+}
+
+/* Navigation Tabs */
+.nav-tabs {
+  position: relative;
+}
+
+.nav-tabs button {
+  position: relative;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.nav-tabs button::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.nav-tabs button:hover::after {
+  background-color: var(--primary-hover);
+}
+
+/* Creation Cards */
+.creation-card-container {
+  transition: transform 0.2s ease;
+}
+
+.creation-card-container:hover {
+  transform: translateY(-4px);
+}
+
+.creation-tile {
+  border-radius: 12px;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.creation-thumbnail {
+  position: relative;
+  overflow: hidden;
+  background-color: #f3f4f6;
+}
+
+.creation-thumbnail img {
+  transition: transform 0.3s ease;
+}
+
+.creation-tile:hover .creation-thumbnail img {
+  transform: scale(1.05);
+}
+
+.creation-type-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Media queries for responsive design */
+@media (max-width: 768px) {
+  .profile-info {
+    max-width: 100%;
+  }
+  
+  .nav-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+}

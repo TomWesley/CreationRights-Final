@@ -1,7 +1,7 @@
-// src/components/layout/AppSidebar.jsx - Updated for fixed position and full height
+// src/components/layout/AppSidebar.jsx - Updated with MyPage and Add Creation button
 
 import React, { useState, useEffect } from 'react';
-import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram, DollarSign } from 'lucide-react';
+import { Home, FileText, Users, Settings, MessageSquare, Search, UserCheck, Instagram, DollarSign, Plus } from 'lucide-react';
 
 import { useAppContext } from '../../contexts/AppContext';
 import NotificationBadge from '../shared/NotificationBadge';
@@ -56,13 +56,28 @@ const AppSidebar = () => {
     
     return () => clearInterval(interval);
   }, [currentUser]);
+
+  // Navigate to upload creation page
+  const navigateToUpload = () => {
+    setActiveView('uploadCreation');
+    setIsMobileMenuOpen(false);
+  };
   
   return (
     <>
       <aside className={`app-sidebar ${isMobileMenuOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-      {/* <img src="/images/watermark.png" alt="Creation Rights Logo" className="sb-logo" /> */}
         <div className="sidebar-content">
-        <img src="/images/watermark.png" alt="Creation Rights Logo" className="sb-logo" />
+          <img src="/images/watermark.png" alt="Creation Rights Logo" className="sb-logo" />
+          
+          {/* Add Creation Button */}
+          <Button 
+            variant="default" 
+            className="add-creation-button"
+            onClick={navigateToUpload}
+          >
+            <Plus className="add-icon" /> Add Creation
+          </Button>
+          
           <nav className="sidebar-nav">
             <div>
               <button
@@ -73,7 +88,7 @@ const AppSidebar = () => {
                 }}
               >
                 <Home className="nav-icon" />
-                Dashboard
+                My Page
               </button>
             </div>
             
@@ -191,8 +206,8 @@ const AppSidebar = () => {
               <span className="flex items-center">
                 <span className="user-name">{currentUser?.name || formatDisplayName(currentUser?.email)}</span>
                 <span className="user-type ml-2">
-              {userType === 'creator' ? 'Creator' : 'Agency'}
-            </span>
+                  {userType === 'creator' ? 'Creator' : 'Agency'}
+                </span>
               </span>
               
               <span className="user-email text-xs text-gray-400 block">

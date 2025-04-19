@@ -1033,7 +1033,7 @@
   
   .tag {
     background-color: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+    color: #b2b2b2;
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
     border-radius: var(--radius-sm);
@@ -1127,7 +1127,7 @@
   
   .tag-item {
     background-color: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
+    color: #a7a7a7;
     font-size: 0.875rem;
     padding: 0.25rem 0.5rem;
     border-radius: var(--radius-sm);
@@ -1137,7 +1137,7 @@
   
   .tag-remove {
     margin-left: 0.25rem;
-    color: #3b82f6;
+    color: #c3c3c3;
     background: none;
     border: none;
     cursor: pointer;
@@ -1512,7 +1512,9 @@
     margin-right: 0.5rem;
   }
 
-  /* Profile Header */
+/* MyPage Specific Styles - add to CreationRightsApp.css */
+
+/* Profile Header */
 .creator-my-page {
   margin-bottom: 2rem;
 }
@@ -1526,18 +1528,26 @@
   box-shadow: var(--shadow-md);
 }
 
-.profile-photo-container {
+.profile-header .profile-photo-container {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-right: 1.5rem;
+  min-width: 120px !important;
+  min-height: 120px !important;
 }
 
-.profile-photo-container img {
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid white;
-  box-shadow: var(--shadow-sm);
+/* Directly targeting the profile photo img elements with high specificity */
+.profile-header .profile-photo-container img,
+.profile-photo-container .user-avatar {
+  width: 200px !important;
+  height: 200px !important;
+  object-fit: cover !important;
+  border-radius: 8px !important; /* Lightly rounded corners */
+  border: 2px solid #f3f4f6 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
 }
+
 
 .profile-info {
   max-width: 70%;
@@ -1568,27 +1578,36 @@
 /* Navigation Tabs */
 .nav-tabs {
   position: relative;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem;
 }
 
-.nav-tabs button {
-  position: relative;
+.nav-tabs-container {
+  display: flex;
+  width: 70%;
+}
+
+.nav-tab-button {
+  flex: 1;
+  padding: 0.75rem 0;
   font-weight: 500;
   transition: all 0.2s ease;
+  color: #000000;
+  text-align: center;
+  border-radius: 0;
+  border: none;
+  margin: 0;
 }
 
-.nav-tabs button::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background-color: transparent;
-  transition: background-color 0.2s ease;
+.nav-tab-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
-.nav-tabs button:hover::after {
-  background-color: var(--primary-hover);
+.nav-tab-button.active {
+  background-color: rgba(140, 140, 140, 0.1);
+  color: #000000;
+  border-bottom: 2px solid #000000;
+  
 }
 
 /* Creation Cards */
@@ -1642,4 +1661,16 @@
   .nav-tabs::-webkit-scrollbar {
     display: none;
   }
+  .profile-header .profile-photo-container img,
+  .profile-photo-container .user-avatar {
+    width: 150px !important;
+    height: 150px !important;
+  }
+  
+  .profile-header .profile-photo-container {
+    min-width: 150px !important;
+    min-height: 150px !important;
+  }
 }
+
+  

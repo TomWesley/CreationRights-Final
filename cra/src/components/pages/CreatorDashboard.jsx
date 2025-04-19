@@ -245,14 +245,20 @@ const CreatorMyPage = () => {
       {/* Profile Header */}
       <div className="profile-header flex flex-col md:flex-row items-start md:items-center mb-6 bg-white rounded-lg p-6 shadow-sm">
         <div className="profile-photo-container mr-6 mb-4 md:mb-0">
-          <ProfilePhoto 
-            email={currentUser?.email}
-            name={profileData.name}
-            photoUrl={profileData.photoUrl}
-            userId={currentUser?.uid}
-            size="lg"
-            clickable={false}
-          />
+          {/* Custom implementation of profile photo to ensure size control */}
+          {profileData.photoUrl ? (
+            <img 
+              src={profileData.photoUrl} 
+              alt={profileData.name} 
+              className="user-avatar"
+            />
+          ) : (
+            <div 
+              className="user-avatar flex items-center justify-center bg-gray-200 text-gray-700 font-bold text-2xl"
+            >
+              {profileData.name?.charAt(0)?.toUpperCase() || "U"}
+            </div>
+          )}
         </div>
         
         <div className="profile-info flex-grow">
@@ -277,21 +283,16 @@ const CreatorMyPage = () => {
       </div>
       
       {/* Navigation Tabs */}
-      <div className="nav-tabs border-b mb-6">
-        <div className="flex space-x-6 overflow-x-auto pb-2">
+      <div className="nav-tabs">
+        <div className="nav-tabs-container">
           {TABS.map(tab => (
-            <Button
+            <button
               key={tab}
-              variant="ghost"
-              className={`py-2 px-1 font-medium ${
-                activeTab === tab 
-                  ? 'text-blue-600 border-b-2 border-blue-600 rounded-none' 
-                  : 'text-gray-600 hover:text-blue-600'
-              }`}
+              className={`nav-tab-button ${activeTab === tab ? 'active' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
               {tab}
-            </Button>
+            </button>
           ))}
         </div>
       </div>

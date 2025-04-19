@@ -139,7 +139,7 @@ const AppSidebar = () => {
                 }}
               >
                 <Users className="nav-icon" />
-                Team
+                Promotions
               </button>
             </div>
             

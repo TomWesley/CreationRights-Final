@@ -216,15 +216,16 @@ const CreatorMyPage = () => {
   
   // Render content based on active tab
   const renderContent = () => {
-    switch (activeTab) {
-      case "Home":
+    switch (activeTab) {   
+        
+      case "Collections":
         return (
           <>
             {renderCreations()}
             
           </>
         );
-      case "Collections":
+      case "Home":
       case "Market":
       case "Members":
       case "About":

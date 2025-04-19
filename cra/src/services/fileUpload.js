@@ -94,27 +94,58 @@ export const getFilePreviewUrl = (file) => {
  */
 // Replace the generateVideoThumbnail function in fileUpload.js
 
-export const generateVideoThumbnail = async (videoFile, userId) => {
-  // First generate the thumbnail locally
-  const thumbnailDataUrl = await generateVideoThumbnailLocal(videoFile);
-  
-  // Convert data URL to Blob for upload
-  const thumbnailBlob = dataURLToBlob(thumbnailDataUrl);
-  const thumbnailFile = new File([thumbnailBlob], 'thumbnail.jpg', { type: 'image/jpeg' });
-  
-  // If we have a user ID, upload the thumbnail to the server
-  if (userId) {
-    try {
-      const result = await uploadFile(userId, thumbnailFile);
-      return result.file.gcsUrl || result.file.url;
-    } catch (error) {
-      console.error('Error uploading thumbnail:', error);
-      return thumbnailDataUrl; // Fallback to local thumbnail
-    }
-  }
-  
-  return thumbnailDataUrl;
+/**
+ * Generate a thumbnail from a video file
+ * @param {File} videoFile - Video file
+ * @returns {Promise<string>} - Thumbnail data URL
+ */
+export const generateVideoThumbnail = (videoFile) => {
+  return new Promise((resolve, reject) => {
+    // Create video element to load the file
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    
+    // Create URL for the video file
+    const videoUrl = URL.createObjectURL(videoFile);
+    video.src = videoUrl;
+    
+    // Set up event listeners
+    video.onloadeddata = () => {
+      // Seek to 25% of the video duration for the thumbnail
+      video.currentTime = video.duration * 0.25;
+    };
+    
+    video.onseeked = () => {
+      // Create canvas to capture the frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      // Draw the video frame to the canvas
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert canvas to data URL
+      const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      // Clean up
+      URL.revokeObjectURL(videoUrl);
+      
+      resolve(thumbnailUrl);
+    };
+    
+    video.onerror = () => {
+      URL.revokeObjectURL(videoUrl);
+      reject(new Error('Error generating video thumbnail'));
+    };
+    
+    // Trigger loading of the video
+    video.load();
+  });
 };
+
 
 // Generate thumbnail locally
 const generateVideoThumbnailLocal = (videoFile) => {
@@ -304,6 +335,8 @@ export const uploadProfilePhoto = async (userId, photoFile) => {
     throw error;
   }
 };
+
+
 
 // Add this to src/services/fileUpload.js
 

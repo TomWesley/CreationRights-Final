@@ -12,6 +12,8 @@ import { useAppContext } from '../../contexts/AppContext';
 import { storage } from '../../services/firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { generateCreationRightsId } from '../../services/metadataExtraction';
+import { generateVideoThumbnail } from '../../services/fileUpload';
+
 
 const UploadCreation = () => {
   const { currentUser, setActiveView, setIsLoading, handleSubmit } = useAppContext();
@@ -36,13 +38,17 @@ const UploadCreation = () => {
 
   // Handle file selection
 
-  const uploadWithProgress = (file, userId, creationRightsId) => {
+  const uploadWithProgress = (file, userId, creationRightsId, formData) => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      const formData = new FormData();
       
-      formData.append('file', file);
-      formData.append('creationRightsId', creationRightsId);
+      // If formData is not provided, create it
+      if (!formData) {
+        formData = new FormData();
+        formData.append('file', file);
+        formData.append('creationRightsId', creationRightsId);
+      }
+      
       const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
       xhr.open('POST', `${API_URL}/api/users/${userId}/upload`, true);
       
@@ -73,11 +79,11 @@ const UploadCreation = () => {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
     
-    // Check if it's an image
-    if (!selectedFile.type.startsWith('image/')) {
+    // Check if it's an image or video
+    if (!selectedFile.type.startsWith('image/') && !selectedFile.type.startsWith('video/')) {
       toast({
         title: "Invalid file type",
-        description: "Please select an image file.",
+        description: "Please select an image or video file.",
         variant: "destructive"
       });
       return;
@@ -89,19 +95,20 @@ const UploadCreation = () => {
     const previewURL = URL.createObjectURL(selectedFile);
     setFilePreview(previewURL);
   };
+  
 
   // Handle form submission
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     
     if (!file) {
-        toast({
-          title: "No file selected",
-          description: "Please select a file to upload.",
-          variant: "destructive"
-        });
-        return;
-      }
+      toast({
+        title: "No file selected",
+        description: "Please select a file to upload.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     if (!title || !photographer || !createdDate || !rightsHolder) {
       toast({
@@ -117,93 +124,108 @@ const UploadCreation = () => {
     
     try {
       // Generate a unique ID for this creation
-        const creationRightsId = generateCreationRightsId();
-
-        // Create form data for file upload
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('creationRightsId', creationRightsId);
-        formData.append('userId', currentUser.uid);
-
-        // Upload to server endpoint
-        const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
-        const response = await fetch(`${API_URL}/api/users/${currentUser.uid}/upload`, {
-        method: 'POST',
-        body: formData
-        });
-
-        if (!response.ok) {
-        throw new Error('Failed to upload file');
+      const creationRightsId = generateCreationRightsId();
+      
+      // Check if this is a video file and generate a thumbnail if needed
+      let thumbnailDataUrl = null;
+      if (file.type.startsWith('video/')) {
+        try {
+          setUploadProgress(5);
+          thumbnailDataUrl = await generateVideoThumbnail(file);
+          setUploadProgress(15);
+        } catch (thumbnailError) {
+          console.error("Error generating video thumbnail:", thumbnailError);
+          // Continue without thumbnail
         }
-
-        const uploadResult = await uploadWithProgress(file, currentUser.uid, creationRightsId);
+      }
+      
+      // Create form data for file upload
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('creationRightsId', creationRightsId);
+      formData.append('userId', currentUser.uid);
+      
+      // If we have a thumbnail, add it to the form data
+      if (thumbnailDataUrl) {
+        formData.append('thumbnail', thumbnailDataUrl);
+      }
+      
+      // Upload to server endpoint
+      const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+      
+      try {
+        // Upload with progress tracking
+        const uploadResult = await uploadWithProgress(file, currentUser.uid, creationRightsId, formData);
         const fileUrl = `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/download`;
-
+        
         // Process tags
         const tagArray = tags.split(',')
-        .map(tag => tag.trim())
-        .filter(tag => tag.length > 0);
-
-
+          .map(tag => tag.trim())
+          .filter(tag => tag.length > 0);
+        
         // Create creation object with metadata
         const newCreation = {
-            id: creationRightsId,
-            title,
-            type: "Image",
-            dateCreated: new Date().toISOString().split('T')[0],
-            rights,
-            notes: description,
-            licensingCost: licensingCost !== '' ? parseFloat(licensingCost) : null,
-            tags: tagArray,
-            fileUrl: fileUrl, // Use the proxy URL
-            thumbnailUrl: fileUrl, // For images, use the same URL as thumbnail
-            status: 'draft',
-            createdBy: currentUser.email,
-            metadata: {
-              category: "Photography",
-              creationRightsId,
-              photographer,
-              createdDate,
-              style,
-              collection,
-              rightsHolders: rightsHolder,
-              dimensions: "Original", // This could be determined from the image
-              uploadedBy: currentUser.email,
-              originalGcsUrl: uploadResult.file.gcsUrl || uploadResult.file.url, // Store original URL as backup
-            }
-          };
-
+          id: creationRightsId,
+          title,
+          type: file.type.startsWith('video/') ? "Video" : "Image",
+          dateCreated: new Date().toISOString().split('T')[0],
+          rights,
+          notes: description,
+          licensingCost: licensingCost !== '' ? parseFloat(licensingCost) : null,
+          tags: tagArray,
+          fileUrl: fileUrl, // Use the proxy URL
+          thumbnailUrl: file.type.startsWith('video/') ? 
+                        `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/thumbnail` : 
+                        fileUrl, // For videos, use a dedicated thumbnail URL
+          status: 'draft',
+          createdBy: currentUser.email,
+          metadata: {
+            category: file.type.startsWith('video/') ? "Video" : "Photography",
+            creationRightsId,
+            photographer,
+            createdDate,
+            style,
+            collection,
+            rightsHolders: rightsHolder,
+            dimensions: "Original", // This could be determined from the image/video
+            uploadedBy: currentUser.email,
+            originalGcsUrl: uploadResult.file.gcsUrl || uploadResult.file.url, // Store original URL as backup
+          }
+        };
+        
         // Save to Firestore via AppContext
         const success = await handleSubmit(newCreation);
         if (success) {
-            toast({
-              title: "Creation uploaded",
-              description: "Your creation has been uploaded successfully.",
-              variant: "default"
-            });
-            
-            // Make sure we're explicitly redirecting to 'myCreations' view
-            setActiveView('myCreations');
-            
-            // Add a slight delay to allow state updates to complete
-            setTimeout(() => {
-              // Double-check we're on the right view
-              
-                setActiveView('myCreations');
-              
-            }, 100);
-          }
-
-        // ...rest of the function (toast notifications, etc.)
-        } catch (error) {
-        console.error("Form submission error:", error);
-        // ...error handling
-        } finally {
-        setIsUploading(false);
-        setIsLoading(false);
+          toast({
+            title: "Creation uploaded",
+            description: "Your creation has been uploaded successfully.",
+            variant: "default"
+          });
+          
+          // Make sure we're explicitly redirecting to 'myCreations' view
+          setActiveView('myCreations');
         }
-
-    };
+      } catch (uploadError) {
+        console.error("Upload error:", uploadError);
+        toast({
+          title: "Upload failed",
+          description: uploadError.message || "Failed to upload file. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Form submission error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred during upload. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploading(false);
+      setIsLoading(false);
+    }
+  };
+  
 
   // Cancel and go back
   const handleCancel = () => {
@@ -237,17 +259,17 @@ const UploadCreation = () => {
           <form onSubmit={handleFormSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="col-span-2">
-                <Label htmlFor="file">Image File *</Label>
+                <Label htmlFor="file">Image Or Video File (500MB Limit) *</Label>
                 <div className="mt-2 flex items-center gap-4">
-                  <input
+                <input
                     type="file"
                     id="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     className="hidden"
-                    accept="image/*"
+                    accept="image/*,video/*"  // Now allows both images and videos
                   />
-                  <Button 
+                                    <Button 
                     type="button" 
                     onClick={triggerFileInput}
                     variant={filePreview ? "outline" : "default"}
@@ -261,14 +283,32 @@ const UploadCreation = () => {
                   )}
                 </div>
                 {filePreview && (
-                  <div className="mt-4 relative">
-                    <img 
-                      src={filePreview} 
-                      alt="Preview" 
-                      className="max-h-60 max-w-full rounded-md object-contain border border-gray-200"
-                    />
-                  </div>
-                )}
+  <div className="mt-4 relative">
+    {file?.type.startsWith('image/') ? (
+      <img 
+        src={filePreview} 
+        alt="Preview" 
+        className="max-h-60 max-w-full rounded-md object-contain border border-gray-200"
+      />
+    ) : file?.type.startsWith('video/') ? (
+      <video 
+        src={filePreview} 
+        controls
+        className="max-h-60 max-w-full rounded-md object-contain border border-gray-200"
+      />
+    ) : null}
+  </div>
+)}
+                {filePreview && file?.type.startsWith('video/') && (
+  <div className="mt-4 relative">
+    <video 
+      src={filePreview} 
+      controls
+      className="max-h-60 max-w-full rounded-md object-contain border border-gray-200"
+    />
+  </div>
+)}
+                
                 {isUploading && (
                   <div className="mt-4">
                     <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">

@@ -108,6 +108,8 @@ const FileUploadComponent = ({ onFileProcessed }) => {
     return new Blob([uInt8Array], { type: contentType });
   };
 
+  
+
   // Process the file
   const handleFile = async (selectedFile) => {
     setFile(selectedFile);

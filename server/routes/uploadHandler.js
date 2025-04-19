@@ -55,108 +55,187 @@ const upload = multer({
   }
 });
 
+// Add this to server/routes/uploadHandler.js
 
+/**
+ * Process video thumbnail from upload request
+ * @param {Object} req - Express request object
+ * @param {Object} file - Uploaded file object
+ * @param {string} userId - User ID
+ * @param {string} creationRightsId - Creation Rights ID
+ * @returns {Promise<string|null>} - Thumbnail URL or null if not available
+ */
+const processVideoThumbnail = async (req, file, userId, creationRightsId) => {
+    // Check if there's a thumbnail in the request
+    if (req.body.thumbnail) {
+      try {
+        console.log('Client provided thumbnail found, processing...');
+        
+        // The thumbnail will be a data URL, convert it to a buffer
+        const base64Data = req.body.thumbnail.replace(/^data:image\/jpeg;base64,/, '');
+        const thumbnailBuffer = Buffer.from(base64Data, 'base64');
+        
+        // Save the thumbnail to GCS
+        const bucket = storage.bucket(BUCKET_NAME);
+        const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
+        
+        await bucket.file(thumbnailPath).save(thumbnailBuffer, {
+          contentType: 'image/jpeg',
+          metadata: {
+            contentType: 'image/jpeg',
+            cacheControl: 'public, max-age=86400'
+          }
+        });
+        
+        console.log(`Saved video thumbnail to ${thumbnailPath}`);
+        
+        // Return the thumbnail URL
+        return `https://storage.googleapis.com/${BUCKET_NAME}/${thumbnailPath}`;
+      } catch (error) {
+        console.error('Error processing video thumbnail:', error);
+        return null;
+      }
+    }
+    
+    // If no thumbnail in request, use a placeholder
+    console.log('No client thumbnail found, using placeholder');
+    const placeholderPath = path.join(__dirname, '../public/video-placeholder.jpg');
+    
+    if (fs.existsSync(placeholderPath)) {
+      try {
+        const thumbnailBuffer = fs.readFileSync(placeholderPath);
+        const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
+        const bucket = storage.bucket(BUCKET_NAME);
+        
+        await bucket.file(thumbnailPath).save(thumbnailBuffer, {
+          contentType: 'image/jpeg',
+          metadata: {
+            contentType: 'image/jpeg',
+            cacheControl: 'public, max-age=86400'
+          }
+        });
+        
+        console.log(`Saved placeholder thumbnail to ${thumbnailPath}`);
+        return `https://storage.googleapis.com/${BUCKET_NAME}/${thumbnailPath}`;
+      } catch (error) {
+        console.error('Error saving placeholder thumbnail:', error);
+        return null;
+      }
+    }
+    
+    return null;
+  };
 
 // File upload endpoint
 router.post('/:userId/upload', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-    
-    const userId = req.params.userId;
-    const file = req.file; // This is now in memory, not on disk
-    const contentType = file.mimetype;
-    
-    console.log(`Processing upload for user: ${userId}`);
-    console.log(`File details: name=${file.originalname}, size=${file.size}, type=${contentType}`);
-    
-  
-    
-    // Get creationRightsId from form data (or generate a new one)
-    const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
-    console.log(`Using creationRightsId: ${creationRightsId}`);
-
-    // Create file info object
-    const fileInfo = {
-      originalName: file.originalname,
-      filename: file.originalname, // Use original name since we don't have a disk filename
-      mimetype: contentType,
-      size: file.size,
-      creationRightsId: creationRightsId
-    };
-    
-    // Upload the file to Google Cloud Storage
     try {
-      const bucket = storage.bucket(BUCKET_NAME);
-      const gcsFilePath = `Creations/${userId}/${creationRightsId}/file`;
-      console.log(`Uploading file to: ${gcsFilePath}`);
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
       
-      const gcsFile = bucket.file(gcsFilePath);
+      const userId = req.params.userId;
+      const file = req.file; // This is now in memory, not on disk
+      const contentType = file.mimetype;
       
-      // Create a writable stream to GCS
-      await gcsFile.save(file.buffer, {
-        contentType: contentType,
-        metadata: {
+      console.log(`Processing upload for user: ${userId}`);
+      console.log(`File details: name=${file.originalname}, size=${file.size}, type=${contentType}`);
+      
+      // Get creationRightsId from form data (or generate a new one)
+      const creationRightsId = req.body.creationRightsId || `CR-${Date.now()}`;
+      console.log(`Using creationRightsId: ${creationRightsId}`);
+  
+      // Create file info object
+      const fileInfo = {
+        originalName: file.originalname,
+        filename: file.originalname, // Use original name since we don't have a disk filename
+        mimetype: contentType,
+        size: file.size,
+        creationRightsId: creationRightsId
+      };
+      
+      // Upload the file to Google Cloud Storage
+      try {
+        const bucket = storage.bucket(BUCKET_NAME);
+        const gcsFilePath = `Creations/${userId}/${creationRightsId}/file`;
+        console.log(`Uploading file to: ${gcsFilePath}`);
+        
+        const gcsFile = bucket.file(gcsFilePath);
+        
+        // Create a writable stream to GCS
+        await gcsFile.save(file.buffer, {
           contentType: contentType,
-          cacheControl: 'no-cache, max-age=0'
-        }
-      });
-      
-      // Handle errors and completion
-      // After successful upload, generate the public URL
+          metadata: {
+            contentType: contentType,
+            cacheControl: 'no-cache, max-age=0'
+          }
+        });
+        
+        // After successful upload, generate the public URL
         const publicUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${gcsFilePath}`;
         fileInfo.gcsUrl = publicUrl;
         fileInfo.url = publicUrl;
         console.log(`File uploaded successfully: ${publicUrl}`);
-      
-
-      // Also save a metadata file for this upload in the same folder
-      const uploadMetadata = {
-        creationRightsId,
-        originalName: file.originalname,
-        contentType,
-        size: file.size,
-        uploadDate: new Date().toISOString(),
-        uploadedBy: userId,
-        gcsUrl: fileInfo.gcsUrl,
-        url: fileInfo.url
-      };
-      
-      try {
-        const metadataPath = `Creations/${userId}/${creationRightsId}/upload-metadata.json`;
-        await bucket.file(metadataPath).save(
-          JSON.stringify(uploadMetadata, null, 2),
-          { contentType: 'application/json' }
-        );
-        console.log(`Saved upload metadata to ${metadataPath}`);
-      } catch (metadataError) {
-        console.error('Error saving upload metadata:', metadataError);
-        // Continue as this is not critical
+        
+        // Process video thumbnail if this is a video
+        if (contentType.startsWith('video/')) {
+          console.log('Processing video thumbnail...');
+          
+          // Use the processVideoThumbnail helper function
+          const thumbnailUrl = await processVideoThumbnail(req, file, userId, creationRightsId);
+          
+          if (thumbnailUrl) {
+            fileInfo.thumbnailUrl = thumbnailUrl;
+            console.log(`Video thumbnail URL: ${thumbnailUrl}`);
+          }
+        }
+  
+        // Also save a metadata file for this upload in the same folder
+        const uploadMetadata = {
+          creationRightsId,
+          originalName: file.originalname,
+          contentType,
+          size: file.size,
+          uploadDate: new Date().toISOString(),
+          uploadedBy: userId,
+          gcsUrl: fileInfo.gcsUrl,
+          url: fileInfo.url,
+          thumbnailUrl: fileInfo.thumbnailUrl
+        };
+        
+        try {
+          const metadataPath = `Creations/${userId}/${creationRightsId}/upload-metadata.json`;
+          await bucket.file(metadataPath).save(
+            JSON.stringify(uploadMetadata, null, 2),
+            { contentType: 'application/json' }
+          );
+          console.log(`Saved upload metadata to ${metadataPath}`);
+        } catch (metadataError) {
+          console.error('Error saving upload metadata:', metadataError);
+          // Continue as this is not critical
+        }
+      } catch (gcsError) {
+        console.error('Error uploading to GCS:', gcsError);
+        return res.status(500).json({ 
+          error: 'Failed to upload to cloud storage',
+          message: gcsError.message,
+          details: gcsError.stack
+        });
       }
-    } catch (gcsError) {
-      console.error('Error uploading to GCS:', gcsError);
-      return res.status(500).json({ 
-        error: 'Failed to upload to cloud storage',
-        message: gcsError.message,
-        details: gcsError.stack
+      
+      // Return success with file info
+      res.status(200).json({
+        success: true,
+        file: fileInfo
+      });
+    } catch (error) {
+      console.error('File upload error:', error);
+      res.status(500).json({ 
+        error: 'File upload failed',
+        message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
-    
-    // Return success with file info
-    res.status(200).json({
-      success: true,
-      file: fileInfo
-    });
-  } catch (error) {
-    console.error('File upload error:', error);
-    res.status(500).json({ 
-      error: 'File upload failed',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
+  });
 
 // Save creation metadata endpoint
 router.post('/:userId/creations', async (req, res) => {
@@ -324,7 +403,154 @@ router.get('/:userId/:creationRightsId/download', async (req, res) => {
       }
     }
   });
+
+  router.get('/:userId/:creationRightsId/thumbnail', async (req, res) => {
+    try {
+      const { userId, creationRightsId } = req.params;
+      
+      if (!storage) {
+        return res.status(500).json({ error: 'Storage not initialized' });
+      }
+      
+      console.log(`Fetching thumbnail for user ${userId}, creationRightsId ${creationRightsId}`);
+      
+      const bucket = storage.bucket(BUCKET_NAME);
+      
+      // First check if a dedicated thumbnail exists
+      const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
+      const [thumbnailExists] = await bucket.file(thumbnailPath).exists();
+      
+      if (thumbnailExists) {
+        // Serve the dedicated thumbnail
+        console.log(`Serving dedicated thumbnail: ${thumbnailPath}`);
+        const thumbnailFile = bucket.file(thumbnailPath);
+        
+        // Get the file's metadata to set the correct content type
+        const [metadata] = await thumbnailFile.getMetadata();
+        res.setHeader('Content-Type', metadata.contentType || 'image/jpeg');
+        
+        // Add cache control headers for better performance
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+        
+        // Stream the thumbnail file to the response
+        thumbnailFile.createReadStream()
+          .on('error', (err) => {
+            console.error('Error streaming thumbnail:', err);
+            if (!res.headersSent) {
+              res.status(500).json({
+                error: 'Error retrieving thumbnail',
+                message: err.message
+              });
+            } else {
+              res.end();
+            }
+          })
+          .pipe(res);
+        return;
+      }
+      
+      // If no dedicated thumbnail exists, try to generate one
+      // (Note: This part is a fallback and might not work in real-time due to
+      // the need for video processing. In a production app, you'd generate
+      // thumbnails during upload or with a background job.)
+      console.log(`No dedicated thumbnail found, serving default placeholder`);
+      
+      // Serve a default placeholder image
+      res.sendFile(path.join(__dirname, '../public/video-placeholder.jpg'));
+    } catch (error) {
+      console.error('Error in thumbnail retrieval:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          error: 'Error retrieving thumbnail',
+          message: error.message
+        });
+      } else {
+        res.end();
+      }
+    }
+  });
   
+
+  router.get('/:userId/:creationRightsId/thumbnail', async (req, res) => {
+    try {
+      const { userId, creationRightsId } = req.params;
+      
+      if (!storage) {
+        return res.status(500).json({ error: 'Storage not initialized' });
+      }
+      
+      console.log(`Fetching thumbnail for user ${userId}, creationRightsId ${creationRightsId}`);
+      
+      const bucket = storage.bucket(BUCKET_NAME);
+      
+      // Check for a dedicated thumbnail
+      const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
+      const [thumbnailExists] = await bucket.file(thumbnailPath).exists();
+      
+      if (thumbnailExists) {
+        // Serve the dedicated thumbnail
+        console.log(`Serving dedicated thumbnail: ${thumbnailPath}`);
+        const thumbnailFile = bucket.file(thumbnailPath);
+        
+        // Get the file's metadata to set the correct content type
+        const [metadata] = await thumbnailFile.getMetadata();
+        res.setHeader('Content-Type', metadata.contentType || 'image/jpeg');
+        
+        // Add cache control headers for better performance
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
+        
+        // Stream the thumbnail file to the response
+        thumbnailFile.createReadStream()
+          .on('error', (err) => {
+            console.error('Error streaming thumbnail:', err);
+            if (!res.headersSent) {
+              res.status(500).json({
+                error: 'Error retrieving thumbnail',
+                message: err.message
+              });
+            } else {
+              res.end();
+            }
+          })
+          .pipe(res);
+        return;
+      }
+      
+      // If no dedicated thumbnail exists, try to use a placeholder
+      try {
+        // Use a placeholder image
+        const placeholderPath = path.join(__dirname, '../public/video-placeholder.jpg');
+        
+        if (fs.existsSync(placeholderPath)) {
+          console.log(`Serving placeholder thumbnail from: ${placeholderPath}`);
+          res.setHeader('Content-Type', 'image/jpeg');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          
+          fs.createReadStream(placeholderPath).pipe(res);
+          return;
+        }
+      } catch (placeholderError) {
+        console.error('Error serving placeholder:', placeholderError);
+      }
+      
+      // If we get here, we don't have a thumbnail or a placeholder
+      res.status(404).json({ 
+        error: 'Thumbnail not found',
+        message: 'No thumbnail is available for this video'
+      });
+    } catch (error) {
+      console.error('Error in thumbnail retrieval:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          error: 'Error retrieving thumbnail',
+          message: error.message
+        });
+      } else {
+        res.end();
+      }
+    }
+  });
+
 // Endpoint to check if a file exists in GCS
 router.get('/files/check/:userId/:creationRightsId', async (req, res) => {
   try {

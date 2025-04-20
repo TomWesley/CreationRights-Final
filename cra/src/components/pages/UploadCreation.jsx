@@ -245,7 +245,7 @@ const UploadCreation = () => {
     <div className="upload-creation">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Upload New Creation</h1>
-        <p className="text-gray-500">Upload a new photography work and add metadata</p>
+        <p className="text-gray-500">Upload a photo or video and add metadata</p>
       </div>
       
       <Card>

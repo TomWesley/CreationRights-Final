@@ -35,6 +35,8 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use('/api/users', uploadHandler);
 app.use('/api', stripeRoutes);
+app.use(express.json({ limit: '2000mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2000mb' }));
 
 // Add explicit handler for OPTIONS requests
 app.options('*', cors(corsOptions));
@@ -185,7 +187,7 @@ const upload = multer({
   storage: multerStorage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB max file size
+    fileSize: 2000 * 1024 * 1024 // Increase to 100MB (from 50MB)
   }
 });
 

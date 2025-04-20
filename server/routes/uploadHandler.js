@@ -48,12 +48,12 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({ 
-  storage: multerStorage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB max file size
-  }
-});
+    storage: multerStorage,
+    fileFilter: fileFilter,
+    limits: {
+      fileSize: 2000 * 1024 * 1024 // Increase to 100MB (from 50MB)
+    }
+  });
 
 // Add this to server/routes/uploadHandler.js
 

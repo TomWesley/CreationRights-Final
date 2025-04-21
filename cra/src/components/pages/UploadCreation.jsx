@@ -12,9 +12,13 @@ import { useAppContext } from '../../contexts/AppContext';
 import { storage } from '../../services/firebase';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { generateCreationRightsId } from '../../services/metadataExtraction';
-import { generateVideoThumbnail } from '../../services/fileUpload';
-
-
+import { 
+  getSignedUploadUrl, 
+  uploadFileWithSignedUrl, 
+  confirmFileUpload, 
+  uploadVideoThumbnail,
+  generateVideoThumbnail 
+} from '../../services/fileUpload';
 const UploadCreation = () => {
   const { currentUser, setActiveView, setIsLoading, handleSubmit } = useAppContext();
   const { toast } = useToast();
@@ -95,7 +99,6 @@ const UploadCreation = () => {
     const previewURL = URL.createObjectURL(selectedFile);
     setFilePreview(previewURL);
   };
-  
 
   // Handle form submission
   const handleFormSubmit = async (e) => {
@@ -126,98 +129,143 @@ const UploadCreation = () => {
       // Generate a unique ID for this creation
       const creationRightsId = generateCreationRightsId();
       
-      // Check if this is a video file and generate a thumbnail if needed
-      let thumbnailDataUrl = null;
-      if (file.type.startsWith('video/')) {
-        try {
-          setUploadProgress(5);
-          thumbnailDataUrl = await generateVideoThumbnail(file);
-          setUploadProgress(15);
-        } catch (thumbnailError) {
-          console.error("Error generating video thumbnail:", thumbnailError);
-          // Continue without thumbnail
-        }
-      }
+      // Process tags
+      const tagArray = tags.split(',')
+        .map(tag => tag.trim())
+        .filter(tag => tag.length > 0);
       
-      // Create form data for file upload
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('creationRightsId', creationRightsId);
-      formData.append('userId', currentUser.uid);
+      // Determine if we should use signed URL (for videos or large files)
+      const isVideo = file.type.startsWith('video/');
+      const isLargeFile = file.size > 25 * 1024 * 1024; // 25MB threshold
+      const shouldUseSignedUrl = isVideo || isLargeFile;
       
-      // If we have a thumbnail, add it to the form data
-      if (thumbnailDataUrl) {
-        formData.append('thumbnail', thumbnailDataUrl);
-      }
-      
-      // Upload to server endpoint
+      // API URL for proxying file downloads
       const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+      let fileUrl, thumbnailUrl, uploadResult;
       
-      try {
-        // Upload with progress tracking
-        const uploadResult = await uploadWithProgress(file, currentUser.uid, creationRightsId, formData);
-        const fileUrl = `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/download`;
-        
-        // Process tags
-        const tagArray = tags.split(',')
-          .map(tag => tag.trim())
-          .filter(tag => tag.length > 0);
-        
-        // Create creation object with metadata
-        const newCreation = {
-          id: creationRightsId,
-          title,
-          type: file.type.startsWith('video/') ? "Video" : "Image",
-          dateCreated: new Date().toISOString().split('T')[0],
-          rights,
-          notes: description,
-          licensingCost: licensingCost !== '' ? parseFloat(licensingCost) : null,
-          tags: tagArray,
-          fileUrl: fileUrl, // Use the proxy URL
-          thumbnailUrl: file.type.startsWith('video/') ? 
-                        `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/thumbnail` : 
-                        fileUrl, // For videos, use a dedicated thumbnail URL
-          status: 'draft',
-          createdBy: currentUser.email,
-          metadata: {
-            category: file.type.startsWith('video/') ? "Video" : "Photography",
-            creationRightsId,
+      if (shouldUseSignedUrl) {
+        try {
+          // Get a signed URL for direct upload
+          setUploadProgress(5);
+          const signedUrlResult = await getSignedUploadUrl(currentUser.uid, file, creationRightsId);
+          setUploadProgress(10);
+          
+          // Upload the file directly to GCS
+          await uploadFileWithSignedUrl(
+            signedUrlResult.signedUrl, 
+            file,
+            (progress) => {
+              // Map progress to range 10-90 to leave room for other operations
+              setUploadProgress(10 + (progress * 0.8)); 
+            }
+          );
+          setUploadProgress(90);
+          
+          // If it's a video, generate and upload a thumbnail
+          if (isVideo) {
+            try {
+              const thumbnailDataUrl = await generateVideoThumbnail(file);
+              
+              // Convert data URL to blob
+              const fetchResponse = await fetch(thumbnailDataUrl);
+              const thumbnailBlob = await fetchResponse.blob();
+              
+              // Upload the thumbnail
+              const thumbnailResult = await uploadVideoThumbnail(
+                currentUser.uid,
+                creationRightsId,
+                thumbnailBlob
+              );
+              
+              thumbnailUrl = thumbnailResult.thumbnailUrl;
+            } catch (thumbnailError) {
+              console.error('Error processing video thumbnail:', thumbnailError);
+              // Continue without thumbnail
+            }
+          }
+          
+          // Confirm the upload is complete
+          uploadResult = await confirmFileUpload(currentUser.uid, creationRightsId, {
+            title,
             photographer,
             createdDate,
             style,
             collection,
-            rightsHolders: rightsHolder,
-            dimensions: "Original", // This could be determined from the image/video
-            uploadedBy: currentUser.email,
-            originalGcsUrl: uploadResult.file.gcsUrl || uploadResult.file.url, // Store original URL as backup
-          }
-        };
-        
-        // Save to Firestore via AppContext
-        const success = await handleSubmit(newCreation);
-        if (success) {
-          toast({
-            title: "Creation uploaded",
-            description: "Your creation has been uploaded successfully.",
-            variant: "default"
+            rightsHolder,
+            rights,
+            description,
+            tags: tagArray
           });
           
-          // Make sure we're explicitly redirecting to 'myCreations' view
-          setActiveView('myCreations');
+          fileUrl = `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/download`;
+          if (!thumbnailUrl && uploadResult.file.thumbnailUrl) {
+            thumbnailUrl = uploadResult.file.thumbnailUrl;
+          }
+        } catch (signedUrlError) {
+          console.error('Error with signed URL upload:', signedUrlError);
+          throw signedUrlError;
         }
-      } catch (uploadError) {
-        console.error("Upload error:", uploadError);
+      } else {
+        // Use the original upload method for smaller files
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('creationRightsId', creationRightsId);
+        
+        uploadResult = await uploadWithProgress(file, currentUser.uid, creationRightsId);
+        fileUrl = `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/download`;
+      }
+      
+      setUploadProgress(95);
+      
+      // Create creation object with metadata
+      const newCreation = {
+        id: creationRightsId,
+        title,
+        // Set the type based on file type
+        type: file.type.startsWith('video/') ? "Video" : "Image",
+        dateCreated: new Date().toISOString().split('T')[0],
+        rights,
+        notes: description,
+        licensingCost: licensingCost !== '' ? parseFloat(licensingCost) : null,
+        tags: tagArray,
+        fileUrl: fileUrl,
+        // Use different thumbnail for videos vs images
+        thumbnailUrl: file.type.startsWith('video/') ? 
+                      (thumbnailUrl || `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/thumbnail`) : 
+                      fileUrl,
+        status: 'draft',
+        createdBy: currentUser.email,
+        metadata: {
+          category: file.type.startsWith('video/') ? "Video" : "Photography",
+          creationRightsId,
+          photographer,
+          createdDate,
+          style,
+          collection,
+          rightsHolders: rightsHolder,
+          dimensions: "Original",
+          uploadedBy: currentUser.email,
+          originalGcsUrl: uploadResult.file.gcsUrl || uploadResult.file.url,
+        }
+      };
+      
+      // Save to Firestore via AppContext
+      const success = await handleSubmit(newCreation);
+      if (success) {
         toast({
-          title: "Upload failed",
-          description: uploadError.message || "Failed to upload file. Please try again.",
-          variant: "destructive"
+          title: "Creation uploaded",
+          description: "Your creation has been uploaded successfully.",
+          variant: "default"
         });
+        
+        // Redirect to 'myCreations' view
+        setActiveView('myCreations');
       }
     } catch (error) {
       console.error("Form submission error:", error);
       toast({
         title: "Error",
-        description: error.message || "An error occurred during upload. Please try again.",
+        description: error.message || "An error occurred during upload.",
         variant: "destructive"
       });
     } finally {
@@ -225,6 +273,7 @@ const UploadCreation = () => {
       setIsLoading(false);
     }
   };
+  
   
 
   // Cancel and go back

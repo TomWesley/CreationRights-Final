@@ -550,6 +550,247 @@ router.get('/:userId/:creationRightsId/download', async (req, res) => {
       }
     }
   });
+/**
+ * Generate a signed URL for direct upload to Google Cloud Storage
+ * @param {string} userId - User ID (email)
+ * @param {string} creationRightsId - Creation Rights ID
+ * @param {string} contentType - MIME type of the file
+ * @param {number} maxSizeBytes - Maximum allowed file size in bytes
+ * @returns {Object} - Object containing the signed URL and file metadata
+ */
+async function generateSignedUploadUrl(userId, creationRightsId, contentType, maxSizeBytes = 1024 * 1024 * 500) {
+    try {
+      const storage = new Storage({
+        keyFilename: process.env.GCS_KEY_FILE || path.join(__dirname, '../key.json')
+      });
+      
+      const bucket = storage.bucket(BUCKET_NAME);
+      const filePath = `Creations/${userId}/${creationRightsId}/file`;
+      const file = bucket.file(filePath);
+      
+      const options = {
+        version: 'v4',
+        action: 'write',
+        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+        contentType: contentType,
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': maxSizeBytes.toString(),
+          'x-goog-meta-my-header': 'custom metadata'
+        },
+        conditions: [
+          ['content-length-range', 0, maxSizeBytes]
+        ]
+      };
+      
+      const [signedUrl] = await file.getSignedUrl(options);
+      
+      // Also create a metadata file to track this upload
+      const metadataPath = `Creations/${userId}/${creationRightsId}/upload-metadata.json`;
+      const metadata = {
+        creationRightsId,
+        contentType,
+        status: 'pending',
+        maxSize: maxSizeBytes,
+        generatedAt: new Date().toISOString(),
+        gcsPath: filePath,
+        gcsUrl: `https://storage.googleapis.com/${BUCKET_NAME}/${filePath}`
+      };
+      
+      await bucket.file(metadataPath).save(
+        JSON.stringify(metadata, null, 2),
+        { contentType: 'application/json' }
+      );
+      
+      return {
+        signedUrl,
+        fileInfo: {
+          creationRightsId,
+          gcsUrl: metadata.gcsUrl,
+          contentType,
+          status: 'pending'
+        }
+      };
+    } catch (error) {
+      console.error('Error generating signed URL:', error);
+      throw error;
+    }
+  }
+  
+  // Add a route to generate signed URLs
+  router.post('/:userId/generate-upload-url', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { contentType, fileSize, creationRightsId = `CR-${Date.now()}` } = req.body;
+      
+      if (!contentType) {
+        return res.status(400).json({ error: 'Content type is required' });
+      }
+      
+      // Generate a signed URL for direct upload
+      const result = await generateSignedUploadUrl(
+        userId,
+        creationRightsId,
+        contentType,
+        fileSize || 1024 * 1024 * 500 // Default 500MB if not specified
+      );
+      
+      res.status(200).json(result);
+    } catch (error) {
+      console.error('Error handling signed URL request:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Add a route to confirm that upload was completed
+  router.post('/:userId/:creationRightsId/confirm-upload', async (req, res) => {
+    try {
+      const { userId, creationRightsId } = req.params;
+      const { metadata } = req.body; // Additional metadata about the file
+      
+      const storage = new Storage({
+        keyFilename: process.env.GCS_KEY_FILE || path.join(__dirname, '../key.json')
+      });
+      
+      const bucket = storage.bucket(BUCKET_NAME);
+      const filePath = `Creations/${userId}/${creationRightsId}/file`;
+      const file = bucket.file(filePath);
+      
+      // Check if file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        return res.status(404).json({ error: 'File not found. Upload may have failed.' });
+      }
+      
+      // Get file metadata
+      const [fileMetadata] = await file.getMetadata();
+      
+      // For videos, generate a thumbnail
+      let thumbnailUrl = null;
+      if (fileMetadata.contentType.startsWith('video/')) {
+        try {
+          // Since we can't generate the thumbnail on the server without additional libraries,
+          // we'll use a placeholder or expect the client to upload a thumbnail separately
+          const placeholderPath = path.join(__dirname, '../public/video-placeholder.jpg');
+          
+          if (fs.existsSync(placeholderPath)) {
+            const thumbnailBuffer = fs.readFileSync(placeholderPath);
+            const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
+            
+            await bucket.file(thumbnailPath).save(thumbnailBuffer, {
+              contentType: 'image/jpeg',
+              metadata: {
+                contentType: 'image/jpeg',
+                cacheControl: 'public, max-age=86400'
+              }
+            });
+            
+            thumbnailUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${thumbnailPath}`;
+          }
+        } catch (thumbnailError) {
+          console.error('Error creating thumbnail:', thumbnailError);
+          // Continue without thumbnail
+        }
+      }
+      
+      // Update metadata
+      const metadataPath = `Creations/${userId}/${creationRightsId}/upload-metadata.json`;
+      const updatedMetadata = {
+        ...metadata,
+        creationRightsId,
+        contentType: fileMetadata.contentType,
+        size: parseInt(fileMetadata.size, 10),
+        status: 'completed',
+        uploadedAt: new Date().toISOString(),
+        gcsUrl: `https://storage.googleapis.com/${BUCKET_NAME}/${filePath}`,
+        thumbnailUrl
+      };
+      
+      await bucket.file(metadataPath).save(
+        JSON.stringify(updatedMetadata, null, 2),
+        { contentType: 'application/json' }
+      );
+      
+      res.status(200).json({
+        success: true,
+        file: {
+          creationRightsId,
+          gcsUrl: updatedMetadata.gcsUrl,
+          contentType: fileMetadata.contentType,
+          size: parseInt(fileMetadata.size, 10),
+          thumbnailUrl
+        }
+      });
+    } catch (error) {
+      console.error('Error confirming upload:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // 2. Now let's add a route to handle thumbnail uploads for videos
+  router.post('/:userId/:creationRightsId/upload-thumbnail', upload.single('thumbnail'), async (req, res) => {
+    try {
+      const { userId, creationRightsId } = req.params;
+      
+      if (!req.file) {
+        return res.status(400).json({ error: 'No thumbnail uploaded' });
+      }
+      
+      const thumbnailFile = req.file;
+      
+      // Only allow image files for thumbnails
+      if (!thumbnailFile.mimetype.startsWith('image/')) {
+        return res.status(400).json({ error: 'Only image files are allowed for thumbnails' });
+      }
+      
+      const storage = new Storage({
+        keyFilename: process.env.GCS_KEY_FILE || path.join(__dirname, '../key.json')
+      });
+      
+      const bucket = storage.bucket(BUCKET_NAME);
+      const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
+      
+      // Upload thumbnail
+      await bucket.file(thumbnailPath).save(thumbnailFile.buffer, {
+        contentType: thumbnailFile.mimetype,
+        metadata: {
+          contentType: thumbnailFile.mimetype,
+          cacheControl: 'public, max-age=86400'
+        }
+      });
+      
+      const thumbnailUrl = `https://storage.googleapis.com/${BUCKET_NAME}/${thumbnailPath}`;
+      
+      // Update metadata to include thumbnail URL
+      try {
+        const metadataPath = `Creations/${userId}/${creationRightsId}/upload-metadata.json`;
+        const [exists] = await bucket.file(metadataPath).exists();
+        
+        if (exists) {
+          const [metadataContent] = await bucket.file(metadataPath).download();
+          const metadata = JSON.parse(metadataContent.toString());
+          
+          metadata.thumbnailUrl = thumbnailUrl;
+          
+          await bucket.file(metadataPath).save(
+            JSON.stringify(metadata, null, 2),
+            { contentType: 'application/json' }
+          );
+        }
+      } catch (metadataError) {
+        console.error('Error updating metadata with thumbnail:', metadataError);
+        // Continue anyway since we have the thumbnail
+      }
+      
+      res.status(200).json({
+        success: true,
+        thumbnailUrl
+      });
+    } catch (error) {
+      console.error('Error uploading thumbnail:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
 // Endpoint to check if a file exists in GCS
 router.get('/files/check/:userId/:creationRightsId', async (req, res) => {
@@ -617,5 +858,6 @@ router.get('/files/check/:userId/:creationRightsId', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 module.exports = router;

@@ -1,4 +1,5 @@
 // src/services/fileUpload.js
+
 /**
  * Uploads a file to the server
  * @param {string} userId - User ID (email)
@@ -17,6 +18,12 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
     
     if (creationRightsId) {
       console.log(`Using creationRightsId: ${creationRightsId}`);
+    }
+    
+    // Check if this is a large file or video that should use signed URLs
+    if (file.size > 25 * 1024 * 1024 || file.type.startsWith('video/')) {
+      console.log(`Large file or video detected, using signed URL approach`);
+      return await uploadLargeFileWithSignedUrl(userId, file, creationRightsId);
     }
     
     // Create form data
@@ -77,6 +84,210 @@ export const uploadFile = async (userId, file, creationRightsId = null) => {
   }
 };
 
+/**
+ * Upload a large file using the signed URL approach
+ * @param {string} userId - User ID (email)
+ * @param {File} file - File object to upload
+ * @param {string} creationRightsId - Creation Rights ID
+ * @param {Function} progressCallback - Optional callback for progress updates
+ * @returns {Promise<Object>} - Response with file info
+ */
+export const uploadLargeFileWithSignedUrl = async (userId, file, creationRightsId = null, progressCallback = null) => {
+  try {
+    // Get a signed URL for direct upload
+    const signedUrlResult = await getSignedUploadUrl(userId, file, creationRightsId);
+    
+    if (progressCallback) progressCallback(10); // Signal that we got the signed URL
+    
+    // Upload the file directly to GCS
+    await uploadFileWithSignedUrl(
+      signedUrlResult.signedUrl, 
+      file,
+      (progress) => {
+        if (progressCallback) {
+          // Map progress to range 10-90
+          progressCallback(10 + (progress * 0.8));
+        }
+      }
+    );
+    
+    if (progressCallback) progressCallback(90); // Signal that the upload is complete
+    
+    // If it's a video, try to generate and upload a thumbnail
+    if (file.type.startsWith('video/')) {
+      try {
+        const thumbnailDataUrl = await generateVideoThumbnail(file);
+        
+        // Convert data URL to blob
+        const fetchResponse = await fetch(thumbnailDataUrl);
+        const thumbnailBlob = await fetchResponse.blob();
+        
+        // Upload the thumbnail
+        await uploadVideoThumbnail(
+          userId,
+          signedUrlResult.fileInfo.creationRightsId,
+          thumbnailBlob
+        );
+      } catch (thumbnailError) {
+        console.error('Error processing video thumbnail:', thumbnailError);
+        // Continue without thumbnail
+      }
+    }
+    
+    if (progressCallback) progressCallback(95); // Signal that we're confirming the upload
+    
+    // Confirm the upload is complete
+    const result = await confirmFileUpload(userId, signedUrlResult.fileInfo.creationRightsId);
+    
+    if (progressCallback) progressCallback(100); // Signal that everything is done
+    
+    return result;
+  } catch (error) {
+    console.error('Error with signed URL upload:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get a signed URL for direct upload to Google Cloud Storage
+ * @param {string} userId - User ID (email)
+ * @param {File} file - File object to upload
+ * @param {string} creationRightsId - Optional creation rights ID
+ * @returns {Promise<Object>} - Response with signed URL and file info
+ */
+export const getSignedUploadUrl = async (userId, file, creationRightsId = null) => {
+  try {
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    console.log(`Getting signed URL for ${file.name}, type: ${file.type}, size: ${file.size}`);
+    
+    const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/generate-upload-url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contentType: file.type,
+        fileSize: file.size,
+        creationRightsId: creationRightsId || undefined
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to get signed URL: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error getting signed URL:', error);
+    throw error;
+  }
+};
+
+/**
+ * Upload a file directly to GCS using a signed URL
+ * @param {string} signedUrl - The signed URL for upload
+ * @param {File} file - File object to upload
+ * @param {Function} progressCallback - Callback for upload progress
+ * @returns {Promise<Object>} - Response from the upload
+ */
+export const uploadFileWithSignedUrl = async (signedUrl, file, progressCallback = null) => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    xhr.open('PUT', signedUrl, true);
+    xhr.setRequestHeader('Content-Type', file.type);
+    
+    if (progressCallback) {
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const progress = (event.loaded / event.total) * 100;
+          progressCallback(progress);
+        }
+      });
+    }
+    
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve({ success: true });
+      } else {
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      }
+    });
+    
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during upload'));
+    });
+    
+    xhr.send(file);
+  });
+};
+
+/**
+ * Confirm that a file was uploaded successfully
+ * @param {string} userId - User ID (email)
+ * @param {string} creationRightsId - Creation Rights ID
+ * @param {Object} metadata - Additional metadata for the file
+ * @returns {Promise<Object>} - Response with file info
+ */
+export const confirmFileUpload = async (userId, creationRightsId, metadata = {}) => {
+  try {
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/${creationRightsId}/confirm-upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ metadata })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to confirm upload: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error confirming upload:', error);
+    throw error;
+  }
+};
+
+/**
+ * Upload a thumbnail for a video file
+ * @param {string} userId - User ID (email)
+ * @param {string} creationRightsId - Creation Rights ID
+ * @param {File|Blob} thumbnailFile - Thumbnail file or blob
+ * @returns {Promise<Object>} - Response with thumbnail URL
+ */
+export const uploadVideoThumbnail = async (userId, creationRightsId, thumbnailFile) => {
+  try {
+    const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
+    const sanitizedUserId = userId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    
+    const formData = new FormData();
+    formData.append('thumbnail', thumbnailFile);
+    
+    const response = await fetch(`${API_URL}/api/users/${sanitizedUserId}/${creationRightsId}/upload-thumbnail`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to upload thumbnail: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error uploading video thumbnail:', error);
+    throw error;
+  }
+};
 
 /**
  * Get file preview URL (local or from server)
@@ -89,13 +300,6 @@ export const getFilePreviewUrl = (file) => {
 
 /**
  * Generate thumbnail from video file
- * @param {File} videoFile - Video file
- * @returns {Promise<string>} - Thumbnail data URL
- */
-// Replace the generateVideoThumbnail function in fileUpload.js
-
-/**
- * Generate a thumbnail from a video file
  * @param {File} videoFile - Video file
  * @returns {Promise<string>} - Thumbnail data URL
  */
@@ -118,22 +322,27 @@ export const generateVideoThumbnail = (videoFile) => {
     };
     
     video.onseeked = () => {
-      // Create canvas to capture the frame
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // Draw the video frame to the canvas
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert canvas to data URL
-      const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
-      
-      // Clean up
-      URL.revokeObjectURL(videoUrl);
-      
-      resolve(thumbnailUrl);
+      try {
+        // Create canvas to capture the frame
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // Draw the video frame to the canvas
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert canvas to data URL
+        const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
+        
+        // Clean up
+        URL.revokeObjectURL(videoUrl);
+        
+        resolve(thumbnailUrl);
+      } catch (error) {
+        URL.revokeObjectURL(videoUrl);
+        reject(error);
+      }
     };
     
     video.onerror = () => {
@@ -144,70 +353,6 @@ export const generateVideoThumbnail = (videoFile) => {
     // Trigger loading of the video
     video.load();
   });
-};
-
-
-// Generate thumbnail locally
-const generateVideoThumbnailLocal = (videoFile) => {
-  return new Promise((resolve, reject) => {
-    // Create video element to load the file
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.muted = true;
-    video.playsInline = true;
-    
-    // Create URL for the video file
-    const videoUrl = URL.createObjectURL(videoFile);
-    video.src = videoUrl;
-    
-    // Set up event listeners
-    video.onloadeddata = () => {
-      // Seek to 25% of the video duration for the thumbnail
-      video.currentTime = video.duration * 0.25;
-    };
-    
-    video.onseeked = () => {
-      // Create canvas to capture the frame
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // Draw the video frame to the canvas
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert canvas to data URL
-      const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
-      
-      // Clean up
-      URL.revokeObjectURL(videoUrl);
-      
-      resolve(thumbnailUrl);
-    };
-    
-    video.onerror = () => {
-      URL.revokeObjectURL(videoUrl);
-      reject(new Error('Error generating video thumbnail'));
-    };
-    
-    // Trigger loading of the video
-    video.load();
-  });
-};
-
-// Convert data URL to Blob for uploading
-const dataURLToBlob = (dataURL) => {
-  const parts = dataURL.split(';base64,');
-  const contentType = parts[0].split(':')[1];
-  const raw = window.atob(parts[1]);
-  const rawLength = raw.length;
-  const uInt8Array = new Uint8Array(rawLength);
-  
-  for (let i = 0; i < rawLength; ++i) {
-    uInt8Array[i] = raw.charCodeAt(i);
-  }
-  
-  return new Blob([uInt8Array], { type: contentType });
 };
 
 /**
@@ -274,12 +419,13 @@ export const extractUrlFromText = (text) => {
   
   return null;
 };
+
 /**
  * Maps general file types to specific metadata categories 
  * @param {string} fileType - The general file type (Image, Music, Video, Text)
  * @returns {string} - The corresponding metadata category
  */
-const mapTypeToMetadataCategory = (fileType) => {
+export const mapTypeToMetadataCategory = (fileType) => {
   switch (fileType.toLowerCase()) {
     case 'image':
       return 'Photography';
@@ -294,15 +440,12 @@ const mapTypeToMetadataCategory = (fileType) => {
   }
 };
 
-
 /**
  * Uploads a profile photo for a user
  * @param {string} userId - User ID (email)
  * @param {File} photoFile - Photo file to upload
  * @returns {Promise<Object>} - Response with file info
  */
-// Update this function in src/services/fileUpload.js
-// Update this function in src/services/fileUpload.js
 export const uploadProfilePhoto = async (userId, photoFile) => {
   try {
     // Fix API URL format - make sure it doesn't have trailing slashes
@@ -336,10 +479,6 @@ export const uploadProfilePhoto = async (userId, photoFile) => {
   }
 };
 
-
-
-// Add this to src/services/fileUpload.js
-
 /**
  * Convert a Google Cloud Storage URL to a proxied URL
  * @param {string} gcsUrl - The GCS URL to convert
@@ -364,4 +503,36 @@ export const getProxiedImageUrl = (gcsUrl, userId) => {
   // Create the proxied URL
   const API_URL = (process.env.REACT_APP_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
   return `${API_URL}/api/images/${sanitizedUserId}/${objectPath}`;
+};
+
+/**
+ * Helper function to retry a function with exponential backoff
+ * @param {Function} fn - Function to retry
+ * @param {number} maxRetries - Maximum number of retries
+ * @param {number} initialDelay - Initial delay in ms
+ * @returns {Promise<any>} - Result of the function
+ */
+export const retryWithBackoff = async (fn, maxRetries = 3, initialDelay = 1000) => {
+  let retries = 0;
+  let delay = initialDelay;
+  
+  while (true) {
+    try {
+      return await fn();
+    } catch (error) {
+      retries++;
+      
+      if (retries >= maxRetries) {
+        throw error;
+      }
+      
+      console.log(`Retrying after error: ${error.message} (Attempt ${retries}/${maxRetries})`);
+      
+      // Wait for the delay
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Exponential backoff
+      delay *= 2;
+    }
+  }
 };

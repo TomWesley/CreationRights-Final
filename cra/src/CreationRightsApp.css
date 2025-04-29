@@ -1672,5 +1672,161 @@
     min-height: 150px !important;
   }
 }
+/* Agency Dashboard Specific Styles */
+
+/* Dashboard Layout */
+.agency-dashboard {
+  padding: 1rem;
+}
+
+/* Card and Section Styling */
+.agency-dashboard .card {
+  transition: all 0.2s ease-in-out;
+  border: 1px solid #f1f1f1;
+}
+
+.agency-dashboard .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+}
+
+/* User avatar styling */
+.user-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* Welcome Section */
+.welcome-section {
+  background: linear-gradient(135deg, #ffffff 0%, #f7f9fc 100%);
+  border-left: 4px solid #3182ce;
+}
+
+/* Tab styling */
+.agency-dashboard .tabs-list {
+  background-color: #f8fafc;
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+}
+
+.agency-dashboard .tabs-trigger {
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.agency-dashboard .tabs-trigger[data-state="active"] {
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  color: #3182ce;
+}
+
+/* License cards */
+.licenses-grid .card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.licenses-grid .card-content {
+  flex-grow: 1;
+}
+
+/* Creator cards */
+.creators-grid .card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.creators-grid .card-content {
+  flex-grow: 1;
+}
+
+/* Activity timeline styling */
+.activity-timeline .activity-item {
+  position: relative;
+  padding-bottom: 1.5rem;
+}
+
+.activity-timeline .activity-item:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Quick action buttons */
+.quick-actions button {
+  border-radius: 0.5rem;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.quick-actions button:hover {
+  background-color: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Renewals timeline */
+.renewals-timeline .renewal-item {
+  transition: background-color 0.2s ease;
+}
+
+.renewals-timeline .renewal-item:hover {
+  background-color: #f8fafc;
+}
+
+/* Recommended content section */
+.recommended-content .card:hover .text-gray-400 {
+  color: #ecc94b; /* Yellow 500 hover state for stars */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .agency-dashboard {
+    padding: 0.5rem;
+  }
+  
+  .welcome-section {
+    padding: 1rem;
+  }
+  
+  .user-avatar {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* Creation type icons */
+.creation-type-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.image-icon {
+  color: #38a169; /* Green */
+}
+
+.text-icon {
+  color: #3182ce; /* Blue */
+}
+
+.music-icon {
+  color: #805ad5; /* Purple */
+}
+
+.video-icon {
+  color: #e53e3e; /* Red */
+}
+
+.software-icon {
+  color: #718096; /* Gray */
+}
 
   

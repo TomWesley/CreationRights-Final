@@ -230,9 +230,9 @@ const UploadCreation = () => {
         tags: tagArray,
         fileUrl: fileUrl,
         // Use different thumbnail for videos vs images
-        thumbnailUrl: file.type.startsWith('video/') ? 
-                      (thumbnailUrl || `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/thumbnail`) : 
-                      fileUrl,
+        thumbnailUrl: file.type.startsWith('video/') 
+    ? (thumbnailUrl || `${API_URL}/api/users/${currentUser.uid}/${creationRightsId}/thumbnail`)
+    : fileUrl,
         status: 'draft',
         createdBy: currentUser.email,
         metadata: {

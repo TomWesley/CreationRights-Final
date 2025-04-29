@@ -1,4 +1,4 @@
-// src/App.jsx - Modified to bypass loading state
+// src/App.jsx - Modified to bypass loading state and improve dashboard rendering
 
 import React from 'react';
 import { AppProvider, useAppContext } from './contexts/AppContext';
@@ -50,7 +50,8 @@ const AppContent = () => {
     
     switch (activeView) {
       case 'dashboard':
-        return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
+        // MODIFIED: Use separate dashboard components based on user type
+        return userType === 'agency' ? <AgencyDashboard /> : <CreatorDashboard />;
       
       // Creator-specific views
       case 'myCreations':
@@ -75,6 +76,7 @@ const AppContent = () => {
         return <AllCreationsList />;
       
       case 'creators':
+        // MODIFIED: Make the distinction clearer
         return userType === 'agency' ? <ArtistsList /> : <CreatorManagement />;
       
       // Common views
@@ -91,7 +93,8 @@ const AppContent = () => {
         return <ChatPage />;
       
       default:
-        return userType === 'creator' ? <CreatorDashboard /> : <AgencyDashboard />;
+        // MODIFIED: Fallback to appropriate dashboard
+        return userType === 'agency' ? <AgencyDashboard /> : <CreatorDashboard />;
     }
   };
   
@@ -108,7 +111,6 @@ const AppContent = () => {
           </div>
         </main>
       </div>
-      
       
       {/* <Footer /> */}
       <Toaster />

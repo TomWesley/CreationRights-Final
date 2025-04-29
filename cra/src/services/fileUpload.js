@@ -305,6 +305,8 @@ export const getFilePreviewUrl = (file) => {
  */
 export const generateVideoThumbnail = (videoFile) => {
   return new Promise((resolve, reject) => {
+    console.log('Generating thumbnail for video:', videoFile.name);
+    
     // Create video element to load the file
     const video = document.createElement('video');
     video.preload = 'metadata';
@@ -315,43 +317,88 @@ export const generateVideoThumbnail = (videoFile) => {
     const videoUrl = URL.createObjectURL(videoFile);
     video.src = videoUrl;
     
+    // Track if any errors occurred
+    let errorOccurred = false;
+    
     // Set up event listeners
     video.onloadeddata = () => {
+      console.log('Video loaded, seeking to thumbnail position');
       // Seek to 25% of the video duration for the thumbnail
-      video.currentTime = video.duration * 0.25;
+      try {
+        if (video.duration && isFinite(video.duration)) {
+          video.currentTime = video.duration * 0.25;
+        } else {
+          // If duration is not available, try to seek to 1 second
+          video.currentTime = 1;
+        }
+      } catch (e) {
+        console.error('Error seeking video:', e);
+        errorOccurred = true;
+        URL.revokeObjectURL(videoUrl);
+        reject(e);
+      }
     };
     
     video.onseeked = () => {
+      if (errorOccurred) return;
+      
       try {
+        console.log('Video seeked, capturing thumbnail');
         // Create canvas to capture the frame
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        const width = video.videoWidth || 320;
+        const height = video.videoHeight || 240;
+        
+        canvas.width = width;
+        canvas.height = height;
         
         // Draw the video frame to the canvas
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, width, height);
         
         // Convert canvas to data URL
         const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
+        console.log('Thumbnail generated successfully');
         
         // Clean up
         URL.revokeObjectURL(videoUrl);
         
         resolve(thumbnailUrl);
       } catch (error) {
+        console.error('Error generating thumbnail:', error);
         URL.revokeObjectURL(videoUrl);
         reject(error);
       }
     };
     
-    video.onerror = () => {
+    video.onerror = (e) => {
+      console.error('Video loading error:', e);
+      errorOccurred = true;
       URL.revokeObjectURL(videoUrl);
-      reject(new Error('Error generating video thumbnail'));
+      reject(new Error('Error loading video for thumbnail generation'));
     };
     
+    // Add timeout to avoid hanging
+    const timeout = setTimeout(() => {
+      if (!errorOccurred) {
+        console.error('Thumbnail generation timed out');
+        errorOccurred = true;
+        URL.revokeObjectURL(videoUrl);
+        reject(new Error('Thumbnail generation timed out'));
+      }
+    }, 10000); // 10 second timeout
+    
     // Trigger loading of the video
+    console.log('Loading video for thumbnail generation');
     video.load();
+    
+    // Catch any unhandled errors
+    video.addEventListener('error', (e) => {
+      console.error('Unhandled video error:', e);
+      clearTimeout(timeout);
+      URL.revokeObjectURL(videoUrl);
+      reject(e);
+    });
   });
 };
 

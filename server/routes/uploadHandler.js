@@ -412,61 +412,51 @@ router.get('/:userId/:creationRightsId/download', async (req, res) => {
         return res.status(500).json({ error: 'Storage not initialized' });
       }
       
-      console.log(`Fetching thumbnail for user ${userId}, creationRightsId ${creationRightsId}`);
-      
       const bucket = storage.bucket(BUCKET_NAME);
       
-      // First check if a dedicated thumbnail exists
+      // Check for a dedicated thumbnail
       const thumbnailPath = `Creations/${userId}/${creationRightsId}/thumbnail.jpg`;
       const [thumbnailExists] = await bucket.file(thumbnailPath).exists();
       
       if (thumbnailExists) {
         // Serve the dedicated thumbnail
-        console.log(`Serving dedicated thumbnail: ${thumbnailPath}`);
         const thumbnailFile = bucket.file(thumbnailPath);
         
         // Get the file's metadata to set the correct content type
         const [metadata] = await thumbnailFile.getMetadata();
         res.setHeader('Content-Type', metadata.contentType || 'image/jpeg');
         
-        // Add cache control headers for better performance
-        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=3600');
-        
         // Stream the thumbnail file to the response
         thumbnailFile.createReadStream()
           .on('error', (err) => {
             console.error('Error streaming thumbnail:', err);
-            if (!res.headersSent) {
-              res.status(500).json({
-                error: 'Error retrieving thumbnail',
-                message: err.message
-              });
-            } else {
-              res.end();
-            }
+            // Fallback to placeholder if streaming fails
+            serveDefaultPlaceholder();
           })
           .pipe(res);
+          
         return;
       }
       
-      // If no dedicated thumbnail exists, try to generate one
-      // (Note: This part is a fallback and might not work in real-time due to
-      // the need for video processing. In a production app, you'd generate
-      // thumbnails during upload or with a background job.)
-      console.log(`No dedicated thumbnail found, serving default placeholder`);
+      // Fallback to placeholder
+      serveDefaultPlaceholder();
       
-      // Serve a default placeholder image
-      res.sendFile(path.join(__dirname, '../public/video-placeholder.jpg'));
-    } catch (error) {
-      console.error('Error in thumbnail retrieval:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ 
-          error: 'Error retrieving thumbnail',
-          message: error.message
-        });
-      } else {
-        res.end();
+      function serveDefaultPlaceholder() {
+        // Use a placeholder image
+        const placeholderPath = path.join(__dirname, '../public/video-placeholder.jpg');
+        
+        if (fs.existsSync(placeholderPath)) {
+          res.setHeader('Content-Type', 'image/jpeg');
+          fs.createReadStream(placeholderPath).pipe(res);
+          return;
+        }
+        
+        // If all else fails, send a 404
+        res.status(404).send('Thumbnail not found');
       }
+    } catch (error) {
+      console.error('Error serving thumbnail:', error);
+      res.status(500).send('Error serving thumbnail');
     }
   });
   

@@ -26,19 +26,7 @@ const MOCK_LICENSES = [
     status: 'active',
     usageScope: 'Commercial - Digital Media Only'
   },
-  {
-    id: 'lic-002',
-    creationId: 'cr-002',
-    title: 'Urban Beats Vol. 2',
-    artist: 'Marcus Reid',
-    artistId: 'user-002',
-    type: 'music',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d',
-    acquired: '2025-04-01',
-    expires: '2025-10-01', 
-    status: 'active',
-    usageScope: 'Commercial - All Media'
-  },
+  
   {
     id: 'lic-003',
     creationId: 'cr-003',
@@ -800,29 +788,7 @@ const AgencyDashboard = () => {
               </CardContent>
             </Card>
             
-            <Card className="overflow-hidden hover:shadow-md transition-shadow duration-200">
-              <div className="h-40 bg-gray-200 relative">
-                <img 
-                  src="https://images.unsplash.com/photo-1484704849700-f032a568e944" 
-                  alt="Urban Sounds Collection"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-2 left-2 bg-white rounded-full p-1 shadow-sm">
-                  {getCreationTypeIcon('music')}
-                </div>
-              </div>
-              
-              <CardContent className="p-3">
-                <h3 className="font-medium text-sm truncate">Urban Sounds Collection</h3>
-                <p className="text-xs text-gray-500">By Sound Masters</p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-blue-600">$320 / year</span>
-                  <Button variant="ghost" size="sm" className="h-7 p-0">
-                    <Star className="h-4 w-4 text-gray-400 hover:text-yellow-500" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            
             
             <Card className="overflow-hidden hover:shadow-md transition-shadow duration-200">
               <div className="h-40 bg-gray-200 relative">

@@ -314,7 +314,6 @@ const MyCreationsList = () => {
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="image">Images</TabsTrigger>
               <TabsTrigger value="text">Text</TabsTrigger>
-              <TabsTrigger value="music">Music</TabsTrigger>
               <TabsTrigger value="video">Video</TabsTrigger>
               <TabsTrigger value="software">Software</TabsTrigger>
             </TabsList>

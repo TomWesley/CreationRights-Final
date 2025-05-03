@@ -98,69 +98,7 @@ const mockCreations = [
         rightsHolders: "David Wilson Photography"
       }
     },
-    // ======== MUSIC / AUDIO ========
-    {
-      id: "CR-2234567890-aud1",
-      title: "Midnight Jazz Quartet",
-      type: "Music",
-      dateCreated: "2024-01-08",
-      rights: "© 2024 BlueNote Records. All rights reserved.",
-      notes: "Live recording from Blue Moon Jazz Club featuring the Emily Davis Quartet.",
-      licensingCost: "599.00",
-      tags: ["jazz", "instrumental", "quartet", "live recording", "piano", "saxophone"],
-      fileSize: "48.5 MB",
-      fileType: "audio/wav",
-      fileName: "midnight_jazz_quartet.wav",
-      status: "published",
-      createdBy: "emily.davis@bluenote.com",
-      fileUrl: "https://example.com/audio/midnight_jazz_quartet.wav",
-      metadata: {
-        category: "Audio",
-        creationRightsId: "CR-2234567890-aud1",
-        artist: "Emily Davis Quartet",
-        releaseDate: "2024-02-01",
-        recordingDate: "2024-01-08",
-        duration: "07:42",
-        label: "BlueNote Records",
-        genre: "Jazz",
-        bpm: "92",
-        key: "Eb Minor",
-        producer: "Marcus Johnson",
-        recordingEngineer: "Sarah Williams",
-        recordingLocation: "Blue Moon Jazz Club, Chicago",
-        instruments: "Piano, Saxophone, Upright Bass, Drums",
-        rightsHolders: "BlueNote Records, Emily Davis Music LLC"
-      }
-    },
-    {
-      id: "CR-2234567891-aud2",
-      title: "Ambient Ocean Soundscape",
-      type: "Music",
-      dateCreated: "2023-12-20",
-      rights: "Licensed under Creative Commons Attribution-NonCommercial 4.0",
-      notes: "Recorded at dawn on Cannon Beach, Oregon. Minimal processing applied.",
-      licensingCost: "0.51",
-      tags: ["ambient", "nature", "ocean", "waves", "soundscape", "relaxation"],
-      fileSize: "62.3 MB",
-      fileType: "audio/flac",
-      fileName: "cannon_beach_dawn.flac",
-      status: "published",
-      createdBy: "natural.sounds@fieldrecordings.org",
-      fileUrl: "https://example.com/audio/cannon_beach_dawn.flac",
-      metadata: {
-        category: "Audio",
-        creationRightsId: "CR-2234567891-aud2",
-        artist: "NatureSounds Collective",
-        recordingDate: "2023-12-20",
-        duration: "12:16",
-        label: "Field Recordings Archive",
-        genre: "Ambient/Nature",
-        equipment: "Zoom H6 with Sennheiser MKH 8060",
-        recordingLocation: "Cannon Beach, Oregon, USA",
-        weatherConditions: "Clear, light breeze, 48°F",
-        rightsHolders: "NatureSounds Collective"
-      }
-    }
+    
 ];
 
 // Export the array correctly - this is the key fix

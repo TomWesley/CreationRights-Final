@@ -1,7 +1,7 @@
 # 🔐 Creation Rights
 
 <div align="center">
-  <img src="public/crlogo.svg" alt="Creation Rights Logo" width="300" />
+  <img src="crlogo.svg" alt="Creation Rights Logo" width="300" />
   <br />
   <h3>Secure management and protection for your creative works</h3>
 
